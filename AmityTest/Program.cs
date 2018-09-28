@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Threading.Tasks;
+using SkiaSharp;
 
 namespace Amity
 {
@@ -8,15 +10,34 @@ namespace Amity
         {
             Console.WriteLine("Hello World!");
             var window = new WindowBase();
-            bool hasPainted = false;
             window.Paint += () =>
             {
-                if (hasPainted) { return; }
-                hasPainted = true;
-                // TEMP
-                for (int i = 0; i < window.Buffer.Length; i++)
+                var client = window.ClientArea;
+                var info = new SKImageInfo(client.Width, client.Height);
+                using (var surface = SKSurface.Create(info, window.BufferPtr, client.Width*4))
                 {
-                    if ((i % 2) == 0) { continue; }
+                    // the the canvas and properties
+                    var canvas = surface.Canvas;
+
+                    // make sure the canvas is blank
+                    canvas.Clear(SKColors.White);
+
+                    // draw some text
+                    var paint = new SKPaint
+                    {
+                        Color = SKColors.Black,
+                        IsAntialias = true,
+                        Style = SKPaintStyle.Fill,
+                        TextAlign = SKTextAlign.Center,
+                        TextSize = 24
+                    };
+                    var coord = new SKPoint(info.Width / 2, (info.Height + paint.TextSize) / 2);
+                    canvas.DrawText("SkiaSharp", coord, paint);
+                }
+
+                // TEMP
+                /*Parallel.For(0, window.Buffer.Length, i =>
+                {
                     var t = (i / 400) % (256 * 3);
                     var r = t < 256 ? t : (t < 512 ? 512 - t : 0);
                     var g = t < 256 ? 0 : (t < 512 ? t - 256 : 768 - t);
@@ -28,7 +49,7 @@ namespace Amity
                         B = (byte)b,
                         A = 255,
                     };
-                }
+                });*/
             };
             window.Show();
         }

@@ -44,5 +44,7 @@ namespace Amity
 		public override void Show() => _api.Show();
 
 		public override Span<Color32> Buffer => _api.Buffer;
+
+		public override IntPtr BufferPtr => _api.BufferPtr;
 	}
 }

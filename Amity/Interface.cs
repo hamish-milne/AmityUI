@@ -12,6 +12,7 @@ namespace Amity
 		public abstract event Action<int> KeyDown;
 		public abstract event Action<int> KeyUp;
 		public abstract event Action Paint;
+		public abstract IntPtr BufferPtr { get; }
 		public abstract Span<Color32> Buffer { get; }
 		public abstract Rectangle WindowArea { get; }
 		public abstract Rectangle ClientArea { get; }
