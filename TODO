@@ -1,0 +1,21 @@
+Cross-platform:
+	✔ Basic events @done(18-09-28 17:35)
+	✔ Automatic backend creation @done(18-09-28 17:35)
+	☐ Manual backend registering (for AOT)
+	☐ Update regions
+	☐ Style options
+	☐ Device context handle (for OpenGL etc.) 
+
+Win32:
+	✔ Window creation @done(18-09-28 17:35)
+	✔ Bitmap painting @done(18-09-28 17:35)
+	☐ Exit the Show loop
+	☐ Resize events
+	☐ Style options
+	☐ Layered windows
+
+XServer:
+	☐ Window creation
+
+Cocoa:
+	☐ Window creation
