@@ -3,14 +3,12 @@ namespace Amity
 	using System;
 	using System.Linq;
 	using System.Drawing;
-	using System.Numerics;
-
-	public interface IWindowAPI
+	public interface IWindowAPI : IWindow
 	{
 		bool IsSupported();
 	}
 
-	public class WindowBase : Window
+	public class WindowBase : IWindow
 	{
 		public static IWindowAPI WindowTemplate { get; set; } = typeof(WindowBase)
 			.Assembly.GetTypes().Where(typeof(IWindowAPI).IsAssignableFrom)
@@ -18,41 +16,45 @@ namespace Amity
 			.Cast<IWindowAPI>()
 			.FirstOrDefault(w => w.IsSupported());
 		
-		private readonly Window _api;
+		private readonly IWindow _api;
 
-		public override event Action<Vector2> MouseMove
+		public event Action<Point> MouseMove
 		{
 			add => _api.MouseMove += value;
 			remove => _api.MouseMove -= value;
 		}
-		public override event Action<int> MouseDown;
-		public override event Action<int> KeyDown;
-		public override event Action<int> KeyUp;
-		public override event Action Paint
+		public event Action<int> MouseDown;
+		public event Action<int> KeyDown;
+		public event Action<int> KeyUp;
+		public event Action Paint
 		{
 			add => _api.Paint += value;
 			remove => _api.Paint -= value;
 		}
-		public override event Action Draw
+		public event Action Draw
 		{
 			add => _api.Draw += value;
 			remove => _api.Draw -= value;
 		}
-		public override Rectangle WindowArea => _api.WindowArea;
-		public override Rectangle ClientArea => _api.ClientArea;
+		public Rectangle WindowArea => _api.WindowArea;
+		public Rectangle ClientArea => _api.ClientArea;
 
 		public WindowBase()
 		{
-			_api = (Window)Activator.CreateInstance(WindowTemplate.GetType());
+			_api = (IWindow)Activator.CreateInstance(WindowTemplate.GetType());
 		}
 
-		public override void Show() => _api.Show();
+		public void Show() => _api.Show();
 
-		public override Span<Color32> Buffer => _api.Buffer;
+		public Span<Color32> Buffer => _api.Buffer;
 
-		public override IntPtr BufferPtr => _api.BufferPtr;
+		public IntPtr BufferPtr => _api.BufferPtr;
 
-		public override IDrawingContext GetDrawingContext()
+		public Point MousePosition => _api.MousePosition;
+
+		public IDrawingContext GetDrawingContext()
 			=> _api.GetDrawingContext();
+		
+		public void Invalidate() => _api.Invalidate();
 	}
 }

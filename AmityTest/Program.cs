@@ -13,7 +13,7 @@ namespace Amity
             var window = new WindowBase();
             window.Paint += () =>
             {
-                var client = window.ClientArea;
+                /*var client = window.ClientArea;
                 var info = new SKImageInfo(client.Width, client.Height);
                 using (var surface = SKSurface.Create(info, window.BufferPtr, client.Width*4))
                 {
@@ -34,7 +34,7 @@ namespace Amity
                     };
                     var coord = new SKPoint(info.Width / 2, (info.Height + paint.TextSize) / 2);
                     canvas.DrawText("SkiaSharp", coord, paint);
-                }
+                }*/
 
                 // TEMP
                 /*Parallel.For(0, window.Buffer.Length, i =>
@@ -61,6 +61,11 @@ namespace Amity
                     dc.Brush = Color.AliceBlue;
                     dc.Rectangle(new Rectangle(new Point(50, 200), new Size(300, 200)));
                 }
+            };
+            window.MouseMove += pos =>
+            {
+                window.Buffer[pos.X + pos.Y*window.ClientArea.Width] = Color.Green;
+                window.Invalidate();
             };
             window.Show();
         }

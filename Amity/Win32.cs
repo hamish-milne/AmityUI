@@ -6,17 +6,18 @@ namespace Amity
 	using System.Runtime.InteropServices;
 	using static System.Runtime.InteropServices.UnmanagedType;
 	using System.Collections.Generic;
+	using System.Diagnostics;
 
-	public class Win32 : Window, IWindowAPI
+	public class Win32 : IWindowAPI
 	{
 		public bool IsSupported()
 			=> Environment.OSVersion.Platform == PlatformID.Win32NT;
 		
-		public override IntPtr BufferPtr => _bitmap;
-		public override unsafe Span<Color32> Buffer
+		public IntPtr BufferPtr => _bitmap;
+		public unsafe Span<Color32> Buffer
 			=> new Span<Color32>((void*)_bitmap, _bitmapWidth * _bitmapHeight);
 
-		public override Rectangle WindowArea
+		public Rectangle WindowArea
 		{
 			get {
 				ThrowError(GetWindowRect(_hwnd, out var rect) == 0);
@@ -29,7 +30,7 @@ namespace Amity
 			}
 		}
 
-		public override Rectangle ClientArea
+		public Rectangle ClientArea
 		{
 			get {
 				ThrowError(GetClientRect(_hwnd, out var rect) == 0);
@@ -75,23 +76,46 @@ namespace Amity
 			= new Dictionary<IntPtr, Win32>();
 		private static Exception _exceptionFromCallback;
 
+		// Limit the repaint rate to avoid flickering
+		private static Stopwatch _stopwatch = new Stopwatch();
+
+		private double _lastRepaintTime = double.NegativeInfinity;
+		private const double RepaintPeriod = 0.02;
+
 		static Win32()
 		{
+			_stopwatch.Start();
 			ClassWndProc = (hwnd, uMsg, wParam, lParam) =>
 			{
 				try
 				{
 					_instances.TryGetValue(hwnd, out var inst);
-					inst?.HandleMessage(uMsg);
+					if (inst != null)
+					{
+						inst.HandleMessage(uMsg, wParam, lParam);
+						if (!inst._isValid) {
+							inst._isValid = true;
+							var t = _stopwatch.Elapsed.TotalSeconds;
+							if (t - inst._lastRepaintTime > RepaintPeriod)
+							{
+								inst._lastRepaintTime = t;
+								//InvalidateRect(hwnd, IntPtr.Zero, 0);
+							}
+						}
+					}
 				} catch(Exception e)
 				{
 					_exceptionFromCallback = e;
 				}
-				return DefWindowProcW(hwnd, uMsg, wParam, lParam);;
+				return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 			};
 		}
 
-		private void HandleMessage(WM uMsg)
+		private bool _isValid = true;
+
+		public void Invalidate() => _isValid = false;
+
+		private void HandleMessage(WM uMsg, UIntPtr wParam, IntPtr lParam)
 		{
 			switch (uMsg)
 			{
@@ -105,6 +129,12 @@ namespace Amity
 					BitBlt(_dstDc, 0, 0, _bitmapWidth, _bitmapHeight,
 						_srcDc, 0, 0, RasterOp.SRCCOPY);
 					Draw?.Invoke();
+					break;
+				case WM.MOUSEMOVE:
+					var xPos = (short)(ushort)(uint)lParam.ToInt32();
+					var yPos = (short)(ushort)((uint)lParam.ToInt32() >> 16);
+					MousePosition = new Point(xPos, yPos);
+					MouseMove?.Invoke(MousePosition);
 					break;
 			}
 		}
@@ -152,17 +182,19 @@ namespace Amity
 		private IntPtr _srcDc;
 		private IntPtr _dstDc;
 
-		public override event Action<Vector2> MouseMove;
-		public override event Action<int> MouseDown;
-		public override event Action<int> KeyDown;
-		public override event Action<int> KeyUp;
-		public override event Action Paint;
-		public override event Action Draw;
+		public event Action<Point> MouseMove;
+		public event Action<int> MouseDown;
+		public event Action<int> KeyDown;
+		public event Action<int> KeyUp;
+		public event Action Paint;
+		public event Action Draw;
+
+		public Point MousePosition { get; private set; }
 
 		const int InitialWidth = 1800;
 		const int InitialHeight = 1000;
 
-		public override void Show()
+		public void Show()
 		{
 			var width = InitialWidth;
 			var height = InitialHeight;
@@ -221,19 +253,22 @@ namespace Amity
 			}
 		}
 
-		public override IDrawingContext GetDrawingContext()
+		public IDrawingContext GetDrawingContext()
 		{
 			return new DrawingContext(this);
 		}
 
 		private class DrawingContext : IDrawingContext
 		{
+			private IntPtr _hwnd;
 			private IntPtr _hdc;
+			private PAINTSTRUCT _paint;
 
 			public DrawingContext(Win32 parent)
 			{
+				_hwnd = parent._hwnd;
 				_hdc = parent._dstDc;
-				BeginPaint(parent._hwnd, out var _);
+				BeginPaint(_hwnd, out _paint);
 				SelectObject(_hdc, GetStockObject(StockObjects.DC_PEN));
 				SelectObject(_hdc, GetStockObject(StockObjects.DC_BRUSH));
 			}
@@ -293,6 +328,7 @@ namespace Amity
 
 			public void Dispose()
 			{
+				EndPaint(_hwnd, ref _paint);
 			}
 
 			public void EndPolygon(bool forceClose)
@@ -1046,6 +1082,12 @@ namespace Amity
 			out PAINTSTRUCT lpPaint
 		);
 
+		[DllImport(User)]
+		private static extern int EndPaint(
+			IntPtr hwnd,
+			ref PAINTSTRUCT lpPaint
+		);
+
 		[DllImport(Gdi)]
 		private static extern int Rectangle(
 			IntPtr hdc,
@@ -1053,6 +1095,13 @@ namespace Amity
 			int top,
 			int right,
 			int bottom
+		);
+
+		[DllImport(User)]
+		private static extern int InvalidateRect(
+			IntPtr hwnd,
+			IntPtr lpRect,
+			int bErase
 		);
 
 #endregion pinvoke

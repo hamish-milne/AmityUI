@@ -2,23 +2,24 @@ namespace Amity
 {
 	using System;
 	using System.Drawing;
-	using System.Numerics;
 	using System.Runtime.InteropServices;
 
-	public abstract class Window
+	public interface IWindow
 	{
-		public abstract event Action<Vector2> MouseMove;
-		public abstract event Action<int> MouseDown;
-		public abstract event Action<int> KeyDown;
-		public abstract event Action<int> KeyUp;
-		public abstract event Action Paint;
-		public abstract event Action Draw;
-		public abstract IntPtr BufferPtr { get; }
-		public abstract Span<Color32> Buffer { get; }
-		public abstract Rectangle WindowArea { get; }
-		public abstract Rectangle ClientArea { get; }
-		public abstract void Show();
-		public abstract IDrawingContext GetDrawingContext();
+		event Action<Point> MouseMove;
+		event Action<int> MouseDown;
+		event Action<int> KeyDown;
+		event Action<int> KeyUp;
+		event Action Paint;
+		event Action Draw;
+		Point MousePosition { get; }
+		IntPtr BufferPtr { get; }
+		Span<Color32> Buffer { get; }
+		Rectangle WindowArea { get; }
+		Rectangle ClientArea { get; }
+		void Show();
+		IDrawingContext GetDrawingContext();
+		void Invalidate();
 	}
 
 	public interface IDrawingContext : IDisposable
