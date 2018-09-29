@@ -12,11 +12,28 @@ namespace Amity
 		public abstract event Action<int> KeyDown;
 		public abstract event Action<int> KeyUp;
 		public abstract event Action Paint;
+		public abstract event Action Draw;
 		public abstract IntPtr BufferPtr { get; }
 		public abstract Span<Color32> Buffer { get; }
 		public abstract Rectangle WindowArea { get; }
 		public abstract Rectangle ClientArea { get; }
 		public abstract void Show();
+		public abstract IDrawingContext GetDrawingContext();
+	}
+
+	public interface IDrawingContext : IDisposable
+	{
+		Color? Brush { get; set; }
+		Color? Pen { get; set; }
+		void BeginPolygon();
+		void PushPoint(Point next);
+		void EndPolygon(bool forceClose);
+		void Line(Point a, Point b);
+		void Rectangle(Rectangle rect);
+		void ArcChord(Rectangle rect, float angleA, float angleB);
+		void ArcSlice(Rectangle rect, float angleA, float angleB);
+		void Text(Point position, string font, string text);
+		ReadOnlySpan<string> Fonts { get; }
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 1)]

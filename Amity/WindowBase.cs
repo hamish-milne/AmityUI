@@ -33,6 +33,11 @@ namespace Amity
 			add => _api.Paint += value;
 			remove => _api.Paint -= value;
 		}
+		public override event Action Draw
+		{
+			add => _api.Draw += value;
+			remove => _api.Draw -= value;
+		}
 		public override Rectangle WindowArea => _api.WindowArea;
 		public override Rectangle ClientArea => _api.ClientArea;
 
@@ -46,5 +51,8 @@ namespace Amity
 		public override Span<Color32> Buffer => _api.Buffer;
 
 		public override IntPtr BufferPtr => _api.BufferPtr;
+
+		public override IDrawingContext GetDrawingContext()
+			=> _api.GetDrawingContext();
 	}
 }

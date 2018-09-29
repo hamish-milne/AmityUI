@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
+using System.Drawing;
 using SkiaSharp;
 
 namespace Amity
@@ -50,6 +51,16 @@ namespace Amity
                         A = 255,
                     };
                 });*/
+            };
+            window.Draw += () =>
+            {
+                using (var dc = window.GetDrawingContext())
+                {
+                    dc.Pen = Color.Red;
+                    dc.Line(new Point(0, 0), new Point(200, 300));
+                    dc.Brush = Color.AliceBlue;
+                    dc.Rectangle(new Rectangle(new Point(50, 200), new Size(300, 200)));
+                }
             };
             window.Show();
         }

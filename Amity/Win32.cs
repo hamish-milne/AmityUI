@@ -104,6 +104,7 @@ namespace Amity
 				case WM.PAINT:
 					BitBlt(_dstDc, 0, 0, _bitmapWidth, _bitmapHeight,
 						_srcDc, 0, 0, RasterOp.SRCCOPY);
+					Draw?.Invoke();
 					break;
 			}
 		}
@@ -156,6 +157,7 @@ namespace Amity
 		public override event Action<int> KeyDown;
 		public override event Action<int> KeyUp;
 		public override event Action Paint;
+		public override event Action Draw;
 
 		const int InitialWidth = 1800;
 		const int InitialHeight = 1000;
@@ -216,11 +218,108 @@ namespace Amity
 				{
 					throw new Exception("Exception in callback", _exceptionFromCallback);
 				}
-				// The message queue will keep giving us PAINT messages
-				// for as long as we call it. So limit the rate here to
-				// save on CPU time.
-				// TODO: Make this configurable
-				//System.Threading.Thread.Sleep(1);
+			}
+		}
+
+		public override IDrawingContext GetDrawingContext()
+		{
+			return new DrawingContext(this);
+		}
+
+		private class DrawingContext : IDrawingContext
+		{
+			private IntPtr _hdc;
+
+			public DrawingContext(Win32 parent)
+			{
+				_hdc = parent._dstDc;
+				BeginPaint(parent._hwnd, out var _);
+				SelectObject(_hdc, GetStockObject(StockObjects.DC_PEN));
+				SelectObject(_hdc, GetStockObject(StockObjects.DC_BRUSH));
+			}
+
+			private Color32 ToColorRef(Color color)
+			{
+				return new Color32
+				{
+					R = color.R,
+					G = color.G,
+					B = color.B,
+					A = 0, // Required by API
+				};
+			}
+
+			public Color? Brush
+			{
+				get => GetDCBrushColor(_hdc);
+				set
+				{
+					SelectObject(_hdc, GetStockObject(value == null
+						? StockObjects.NULL_BRUSH : StockObjects.DC_BRUSH));
+					if (value.HasValue) {
+						SetDCBrushColor(_hdc, ToColorRef(value.Value));
+					}
+				}
+			}
+			public Color? Pen
+			{
+				get => GetDCPenColor(_hdc);
+				set
+				{
+					SelectObject(_hdc, GetStockObject(value == null
+						? StockObjects.NULL_PEN : StockObjects.DC_PEN));
+					if (value.HasValue) {
+						SetDCPenColor(_hdc, ToColorRef(value.Value));
+					}
+				}
+			}
+
+			public ReadOnlySpan<string> Fonts => throw new NotImplementedException();
+
+			public void ArcChord(Rectangle rect, float angleA, float angleB)
+			{
+				throw new NotImplementedException();
+			}
+
+			public void ArcSlice(Rectangle rect, float angleA, float angleB)
+			{
+				throw new NotImplementedException();
+			}
+
+			public void BeginPolygon()
+			{
+				throw new NotImplementedException();
+			}
+
+			public void Dispose()
+			{
+			}
+
+			public void EndPolygon(bool forceClose)
+			{
+				throw new NotImplementedException();
+			}
+
+			public void Line(Point a, Point b)
+			{
+				ThrowError(MoveToEx(_hdc, a.X, a.Y, out var _) == 0);
+				ThrowError(LineTo(_hdc, b.X, b.Y) == 0);
+			}
+
+			public void PushPoint(Point next)
+			{
+				throw new NotImplementedException();
+			}
+
+			public void Rectangle(Rectangle rect)
+			{
+				ThrowError(Win32.Rectangle(_hdc,
+					rect.Left, rect.Top, rect.Right, rect.Bottom) == 0);
+			}
+
+			public void Text(Point position, string font, string text)
+			{
+				throw new NotImplementedException();
 			}
 		}
 
@@ -861,6 +960,99 @@ namespace Amity
 		[DllImport(Gdi)]
 		private static extern int DeleteObject(
 			IntPtr ho
+		);
+
+		[DllImport(Gdi)]
+		private static extern Color32 SetDCPenColor(
+			IntPtr hdc,
+			Color32 color
+		);
+
+		[DllImport(Gdi)]
+		private static extern Color32 GetDCPenColor(
+			IntPtr hdc
+		);
+
+		[DllImport(Gdi)]
+		private static extern Color32 SetDCBrushColor(
+			IntPtr hdc,
+			Color32 color
+		);
+
+		[DllImport(Gdi)]
+		private static extern Color32 GetDCBrushColor(
+			IntPtr hdc
+		);
+
+		[DllImport(Gdi)]
+		private static extern int MoveToEx(
+			IntPtr hdc,
+			int x,
+			int y,
+			out POINT lppt
+		);
+
+		[DllImport(Gdi)]
+		private static extern int LineTo(
+			IntPtr hdc,
+			int x,
+			int y
+		);
+
+		private enum StockObjects
+		{
+			WHITE_BRUSH     = 0,
+			LTGRAY_BRUSH    = 1,
+			GRAY_BRUSH      = 2,
+			DKGRAY_BRUSH    = 3,
+			BLACK_BRUSH     = 4,
+			NULL_BRUSH      = 5,
+			HOLLOW_BRUSH    = NULL_BRUSH,
+			WHITE_PEN       = 6,
+			BLACK_PEN       = 7,
+			NULL_PEN    = 8,
+			OEM_FIXED_FONT  = 10,
+			ANSI_FIXED_FONT = 11,
+			ANSI_VAR_FONT   = 12,
+			SYSTEM_FONT     = 13,
+			DEVICE_DEFAULT_FONT = 14,
+			DEFAULT_PALETTE     = 15,
+			SYSTEM_FIXED_FONT   = 16,
+			DEFAULT_GUI_FONT    = 17,
+			DC_BRUSH    = 18,
+			DC_PEN      = 19,
+		}
+
+		[DllImport(Gdi)]
+    	private static extern IntPtr GetStockObject(
+			StockObjects fnObject
+		);
+
+		[StructLayout(LayoutKind.Sequential)]
+		struct PAINTSTRUCT
+		{
+			public IntPtr hdc;
+			public bool fErase;
+			public RECT rcPaint;
+			public bool fRestore;
+			public bool fIncUpdate;
+			[MarshalAs(UnmanagedType.ByValArray, SizeConst=32)]
+			public byte [] rgbReserved;
+		}
+
+		[DllImport(User)]
+		private static extern IntPtr BeginPaint(
+			IntPtr hwnd,
+			out PAINTSTRUCT lpPaint
+		);
+
+		[DllImport(Gdi)]
+		private static extern int Rectangle(
+			IntPtr hdc,
+			int left,
+			int top,
+			int right,
+			int bottom
 		);
 
 #endregion pinvoke
