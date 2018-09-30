@@ -50,9 +50,27 @@ namespace Amity
 				case 1:
 					var response2 = Read<ConnectionSuccess>();
 					var vendor = ReadString(response2.VendorLength, true);
+					_formats.Clear();
 					for (var i = 0; i < response2.FormatCount; i++)
 					{
 						_formats.Add(Read<Format>());
+					}
+					_screens.Clear();
+					for (var i = 0; i < response2.ScreenCount; i++)
+					{
+						var screen = Read<Screen>();
+						var depths = new List<(Depth, List<VisualType>)>();
+						for (var j = 0; j < screen.DepthCount; j++)
+						{
+							var depth = Read<Depth>();
+							var visualTypes = new List<VisualType>();
+							for (var k = 0; k < depth.VisualsCount; k++)
+							{
+								visualTypes.Add(Read<VisualType>());
+							}
+							depths.Add((depth, visualTypes));
+						}
+						_screens.Add((screen, depths));
 					}
 					break;
 			}
@@ -112,6 +130,163 @@ namespace Amity
 			public byte ScanlinePad;
 		}
 
+		enum BackingStoreType : byte
+		{
+			Never = 0,
+			WhenMapped = 1,
+			Always = 2
+		}
+
+		[Flags]
+		enum Event : uint
+		{
+			KeyPress = (1 << 0),
+			KeyRelease = (1 << 1),
+			ButtonPress = (1 << 2),
+			ButtonRelease = (1 << 3),
+			EnterWindow = (1 << 4),
+			LeaveWindow = (1 << 5),
+			PointerMotion = (1 << 6),
+			PointerMotionHint = (1 << 7),
+			Button1Motion = (1 << 8),
+			Button2Motion = (1 << 9),
+			Button3Motion = (1 << 10),
+			Button4Motion = (1 << 11),
+			Button5Motion = (1 << 12),
+			ButtonMotion = (1 << 13),
+			KeymapState = (1 << 14),
+			Exposure = (1 << 15),
+			VisibilityChange = (1 << 16),
+			StructureNotify = (1 << 17),
+			ResizeRedirect = (1 << 18),
+			SubstructureNotify = (1 << 19),
+			SubstructureRedirect = (1 << 20),
+			FocusChange = (1 << 21),
+			PropertyChange = (1 << 22),
+			ColormapChange = (1 << 23),
+			OwnerGrabButton = (1 << 24),
+		}
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2)]
+		struct Screen
+		{
+			public uint Root;
+			public uint DefaultColormap;
+			public Color32 WhitePixel;
+			public Color32 BlackPixel;
+			public uint CurrentInputMasks;
+			public ushort Width;
+			public ushort Height;
+			public ushort WidthMM;
+			public ushort HeightMM;
+			public ushort MinMaps;
+			public ushort MaxMaps;
+			public uint RootVisual;
+			public BackingStoreType BackingStores;
+			public byte SaveUnders;
+			public byte RootDepth;
+			public byte DepthCount;
+		}
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2)]
+		struct Depth
+		{
+			public byte DepthValue;
+			public ushort VisualsCount;
+			private uint _unused;
+		}
+
+		enum ColorType : byte
+		{
+			StaticGray,
+			GrayScale,
+			StaticColor,
+			PseudoColor,
+			TrueColor,
+			DirectColor
+		}
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2)]
+		struct VisualType
+		{
+			public uint VisualId;
+			public ColorType Class;
+			public byte BitsPerRgbValue;
+			public ushort ColormapEntries;
+			public uint RedMask;
+			public uint GreenMask;
+			public uint BlueMask;
+			private uint _unused;
+		}
+
+		class ValuesMask
+		{
+			public uint BackgroundPixmap;
+			public uint BackgroundPixel;
+			public uint BorderPixmap;
+			public uint BorderPixel;
+			public byte BitGravity;
+			public byte WinGravity;
+			public BackingStoreType BackingStore;
+			public uint BackingPlanes;
+			public uint BackingPixel;
+			public byte OverrideRedirect;
+			public bool SaveUnder;
+			public Event EventMask;
+			public Event DoNotPropagateMask;
+			public uint Colormap;
+			public uint Cursor;
+
+			public void Read(uint mask, BinaryReader reader)
+			{
+				if ((mask & (1 << 0)) != 0) {
+					BackgroundPixmap = reader.ReadUInt32();
+				}
+				if ((mask & (1 << 1)) != 0) {
+					BackgroundPixel = reader.ReadUInt32();
+				}
+				if ((mask & (1 << 2)) != 0) {
+					BorderPixmap = reader.ReadUInt32();
+				}
+				if ((mask & (1 << 3)) != 0) {
+					BorderPixel = reader.ReadUInt32();
+				}
+				if ((mask & (1 << 4)) != 0) {
+					BitGravity = reader.ReadByte();
+				}
+				if ((mask & (1 << 5)) != 0) {
+					WinGravity = reader.ReadByte();
+				}
+				if ((mask & (1 << 6)) != 0) {
+					BackingStore = (BackingStoreType)reader.ReadByte();
+				}
+				if ((mask & (1 << 7)) != 0) {
+					BackingPlanes = reader.ReadUInt32();
+				}
+				if ((mask & (1 << 8)) != 0) {
+					BackingPixel = reader.ReadUInt32();
+				}
+				if ((mask & (1 << 9)) != 0) {
+					OverrideRedirect = reader.ReadByte();
+				}
+				if ((mask & (1 << 10)) != 0) {
+					SaveUnder = reader.ReadByte() != 0;
+				}
+				if ((mask & (1 << 11)) != 0) {
+					EventMask = (Event)reader.ReadUInt32();
+				}
+				if ((mask & (1 << 12)) != 0) {
+					DoNotPropagateMask = (Event)reader.ReadUInt32();
+				}
+				if ((mask & (1 << 13)) != 0) {
+					Colormap = reader.ReadUInt32();
+				}
+				if ((mask & (1 << 15)) != 0) {
+					Cursor = reader.ReadUInt32();
+				}
+			}
+		}
+
 		private byte[] _buffer;
 
 		private unsafe T Read<T>() where T : struct
@@ -150,22 +325,8 @@ namespace Amity
 		}
 
 		private List<Format> _formats = new List<Format>();
-
-		struct Screen
-		{
-			public uint WindowRoot;
-			public uint Colormap;
-			public uint WhitePixel;
-			public uint BlackPixel;
-			public uint InputMasks;
-			public ushort Width;
-			public ushort Height;
-			public ushort WidthMM;
-			public ushort HeightMM;
-			public ushort MinMaps;
-			public ushort MaxMaps;
-			public uint VisualId;
-		}
+		private List<(Screen, List<(Depth, List<VisualType>)>)> _screens
+			= new List<(Screen, List<(Depth, List<VisualType>)>)>();
 
 		public void Dispose()
 		{
