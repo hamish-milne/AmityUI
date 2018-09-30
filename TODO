@@ -2,20 +2,27 @@ Cross-platform:
 	✔ Basic events @done(18-09-28 17:35)
 	✔ Automatic backend creation @done(18-09-28 17:35)
 	☐ Manual backend registering (for AOT)
-	☐ Update regions
+	✔ Update regions @done(18-09-30 23:14)
 	☐ Style options
 	☐ Device context handle (for OpenGL etc.) 
+	✔ Drawing contexts @done(18-09-30 23:14)
 
 Win32:
 	✔ Window creation @done(18-09-28 17:35)
 	✔ Bitmap painting @done(18-09-28 17:35)
-	☐ Exit the Show loop
+	✔ Exit the Show loop @done(18-09-30 23:14)
 	☐ Resize events
 	☐ Style options
 	☐ Layered windows
+	☐ Drawing contexts with GDI
+	☐ Mouse and button events
 
 XServer:
-	☐ Window creation
+	✔ Window creation @done(18-09-30 23:13)
+	☐ Sizing and resizing
+	☐ Drawing context
+	☐ Bitmap painting
+	☐ Mouse and button events
 
-Cocoa:
+Quartz:
 	☐ Window creation

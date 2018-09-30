@@ -19,7 +19,7 @@ namespace Amity
 		private BinaryReader _reader;
 		private BinaryWriter _writer;
 
-		private void Connect(EndPoint endPoint)
+		public void Connect(EndPoint endPoint)
 		{
 			_socket = new Socket(endPoint.AddressFamily,
 				SocketType.Stream, ProtocolType.IP);
@@ -35,7 +35,7 @@ namespace Amity
 			// Initialize connection
 			Write(new ConnectionRequest
 			{
-				ByteOrder = 154,
+				ByteOrder = 0x6C,
 				MajorVersion = 11
 			});
 			_writer.Flush();
@@ -72,8 +72,35 @@ namespace Amity
 						}
 						_screens.Add((screen, depths));
 					}
+					_info = response2;
 					break;
 			}
+		}
+
+		[MethodImpl(MethodImplOptions.Synchronized)]
+		public void CreateWindow(Rectangle rect)
+		{
+			var data = new CreateWindowData
+			{
+				Opcode = 1,
+				X = (ushort)rect.X,
+				Y = (ushort)rect.Y,
+				Width = (ushort)rect.Width,
+				Height = (ushort)rect.Height,
+				RequestLength = 8,
+				Visual = _screens.First().Item1.RootVisual,
+				Parent = _screens.First().Item1.Root,
+				Depth = _screens.First().Item1.RootDepth,
+				WindowId = _info.ResourceIdBase + 1,
+				Class = WindowClass.InputOutput
+			};
+			Write(data);
+			Write(new MapWindowData
+			{
+				Opcode = 8,
+				RequestLength = 2,
+				Window = data.WindowId
+			});
 		}
 
 		[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -84,6 +111,7 @@ namespace Amity
 			public ushort MinorVersion;
 			public ushort AuthNameLength;
 			public ushort AuthDataLength;
+			private ushort _unused;
 		}
 
 		[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -122,7 +150,7 @@ namespace Amity
 			private uint _unused;
 		}
 
-		[StructLayout(LayoutKind.Sequential, Pack = 8)]
+		[StructLayout(LayoutKind.Sequential, Size = 8)]
 		struct Format
 		{
 			public byte Depth;
@@ -219,6 +247,31 @@ namespace Amity
 			private uint _unused;
 		}
 
+		enum WindowClass : ushort
+		{
+			CopyFromPArent,
+			InputOutput,
+			InputOnly
+		}
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2)]
+		struct CreateWindowData
+		{
+			public byte Opcode;
+			public byte Depth;
+			public ushort RequestLength;
+			public uint WindowId;
+			public uint Parent;
+			public ushort X;
+			public ushort Y;
+			public ushort Width;
+			public ushort Height;
+			public ushort BorderWidth;
+			public WindowClass Class;
+			public uint Visual;
+			public uint Values;
+		}
+
 		class ValuesMask
 		{
 			public uint BackgroundPixmap;
@@ -237,54 +290,77 @@ namespace Amity
 			public uint Colormap;
 			public uint Cursor;
 
-			public void Read(uint mask, BinaryReader reader)
+			public void Transmit(uint mask, BinaryReader reader, BinaryWriter writer)
 			{
 				if ((mask & (1 << 0)) != 0) {
-					BackgroundPixmap = reader.ReadUInt32();
+					writer?.Write(BackgroundPixmap);
+					BackgroundPixmap = reader?.ReadUInt32() ?? BackgroundPixmap;
 				}
 				if ((mask & (1 << 1)) != 0) {
-					BackgroundPixel = reader.ReadUInt32();
+					writer?.Write(BackgroundPixel);
+					BackgroundPixel = reader?.ReadUInt32() ?? BackgroundPixel;
 				}
 				if ((mask & (1 << 2)) != 0) {
-					BorderPixmap = reader.ReadUInt32();
+					writer?.Write(BorderPixmap);
+					BorderPixmap = reader?.ReadUInt32() ?? BorderPixmap;
 				}
 				if ((mask & (1 << 3)) != 0) {
-					BorderPixel = reader.ReadUInt32();
+					writer?.Write(BorderPixel);
+					BorderPixel = reader?.ReadUInt32() ?? BorderPixel;
 				}
 				if ((mask & (1 << 4)) != 0) {
-					BitGravity = reader.ReadByte();
+					writer?.Write(BitGravity);
+					BitGravity = reader?.ReadByte() ?? BitGravity;
 				}
 				if ((mask & (1 << 5)) != 0) {
-					WinGravity = reader.ReadByte();
+					writer?.Write(WinGravity);
+					WinGravity = reader?.ReadByte() ?? WinGravity;
 				}
 				if ((mask & (1 << 6)) != 0) {
-					BackingStore = (BackingStoreType)reader.ReadByte();
+					writer?.Write((uint)BackingStore);
+					BackingStore = (BackingStoreType?)reader?.ReadByte() ?? BackingStore;
 				}
 				if ((mask & (1 << 7)) != 0) {
-					BackingPlanes = reader.ReadUInt32();
+					writer?.Write(BackingPlanes);
+					BackingPlanes = reader?.ReadUInt32() ?? BackingPlanes;
 				}
 				if ((mask & (1 << 8)) != 0) {
-					BackingPixel = reader.ReadUInt32();
+					writer?.Write(BackingPixel);
+					BackingPixel = reader?.ReadUInt32() ?? BackingPixel;
 				}
 				if ((mask & (1 << 9)) != 0) {
-					OverrideRedirect = reader.ReadByte();
+					writer?.Write(OverrideRedirect);
+					OverrideRedirect = reader?.ReadByte() ?? OverrideRedirect;
 				}
 				if ((mask & (1 << 10)) != 0) {
-					SaveUnder = reader.ReadByte() != 0;
+					writer?.Write(SaveUnder ? (byte)1 : (byte)0);
+					SaveUnder = reader == null ? SaveUnder : reader.ReadByte() != 0;
 				}
 				if ((mask & (1 << 11)) != 0) {
-					EventMask = (Event)reader.ReadUInt32();
+					writer?.Write((uint)EventMask);
+					EventMask = (Event?)reader?.ReadUInt32() ?? EventMask;
 				}
 				if ((mask & (1 << 12)) != 0) {
-					DoNotPropagateMask = (Event)reader.ReadUInt32();
+					writer?.Write((uint)DoNotPropagateMask);
+					DoNotPropagateMask = (Event?)reader?.ReadUInt32() ?? DoNotPropagateMask;
 				}
 				if ((mask & (1 << 13)) != 0) {
-					Colormap = reader.ReadUInt32();
+					writer?.Write(Colormap);
+					Colormap = reader?.ReadUInt32() ?? Colormap;
 				}
 				if ((mask & (1 << 15)) != 0) {
-					Cursor = reader.ReadUInt32();
+					writer?.Write(Cursor);
+					Cursor = reader?.ReadUInt32() ?? Cursor;
 				}
 			}
+		}
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2)]
+		private struct MapWindowData
+		{
+			public byte Opcode;
+			public ushort RequestLength;
+			public uint Window;
 		}
 
 		private byte[] _buffer;
@@ -324,6 +400,7 @@ namespace Amity
 			return Encoding.UTF8.GetString(_buffer, 0, len);
 		}
 
+		private ConnectionSuccess _info;
 		private List<Format> _formats = new List<Format>();
 		private List<(Screen, List<(Depth, List<VisualType>)>)> _screens
 			= new List<(Screen, List<(Depth, List<VisualType>)>)>();
@@ -385,10 +462,29 @@ namespace Amity
 		public event Action Paint;
 		public event Action Draw;
 
+		private static X11Connection _connection;
+
+		public static EndPoint EndPoint { get; set; }
+
+		private static X11Connection Connect()
+		{
+			if (_connection == null)
+			{
+				_connection = new X11Connection();
+				if (EndPoint == null)
+				{
+					GetServer(out var endPoint, out var _);
+					EndPoint = endPoint;
+				}
+				_connection.Connect(EndPoint);
+			}
+			return _connection;
+		}
 
 		public void Show()
 		{
-			throw new NotImplementedException();
+			var c = Connect();
+			c.CreateWindow(new Rectangle(100, 100, 600, 400));
 		}
 
 		public IDrawingContext GetDrawingContext()

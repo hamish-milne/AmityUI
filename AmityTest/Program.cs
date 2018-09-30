@@ -9,6 +9,11 @@ namespace Amity
     {
         static void Main(string[] args)
         {
+            X11.EndPoint = new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 6000);
+            var xWindow = new X11();
+            xWindow.Show();
+            return;
+
             Console.WriteLine("Hello World!");
             var window = new WindowBase();
             window.Paint += () =>
