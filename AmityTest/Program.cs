@@ -9,12 +9,13 @@ namespace Amity
     {
         static void Main(string[] args)
         {
-            X11.EndPoint = new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 6000);
-            var xWindow = new X11();
+            X11Window.EndPoint = new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 6000);
+            var xWindow = new X11Window();
             xWindow.KeyDown += k =>
             {
-                
+                Console.WriteLine(k);
             };
+            Console.WriteLine("Showing window...");
             xWindow.Show(new Rectangle(0, 0, 600, 400));
             return;
 
