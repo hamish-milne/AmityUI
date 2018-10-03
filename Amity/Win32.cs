@@ -194,11 +194,8 @@ namespace Amity
 		const int InitialWidth = 1800;
 		const int InitialHeight = 1000;
 
-		public void Show()
+		public void Show(Rectangle rect)
 		{
-			var width = InitialWidth;
-			var height = InitialHeight;
-
 			SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT.PER_MONITOR_AWARE_V2);
 			var hInstance = GetModuleHandle(null);
 			var wndClass = new WNDCLASSEXW
@@ -221,8 +218,8 @@ namespace Amity
 				WS.OVERLAPPEDWINDOW,
 				0x80000000,
 				0x80000000,
-				width,
-				height,
+				rect.Width,
+				rect.Height,
 				IntPtr.Zero,
 				IntPtr.Zero,
 				hInstance,
@@ -230,9 +227,6 @@ namespace Amity
 			);
 			ThrowError(_hwnd == IntPtr.Zero);
 			_instances[_hwnd] = this;
-
-			
-
 
 			ShowWindow(_hwnd, 1);
 			

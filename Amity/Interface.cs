@@ -17,7 +17,7 @@ namespace Amity
 		Span<Color32> Buffer { get; }
 		Rectangle WindowArea { get; }
 		Rectangle ClientArea { get; }
-		void Show();
+		void Show(Rectangle rect);
 		IDrawingContext GetDrawingContext();
 		void Invalidate();
 	}

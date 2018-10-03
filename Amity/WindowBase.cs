@@ -44,7 +44,7 @@ namespace Amity
 			_api = (IWindow)Activator.CreateInstance(WindowTemplate.GetType());
 		}
 
-		public void Show() => _api.Show();
+		public void Show(Rectangle rect) => _api.Show(rect);
 
 		public Span<Color32> Buffer => _api.Buffer;
 

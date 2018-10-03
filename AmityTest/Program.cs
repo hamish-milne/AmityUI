@@ -11,7 +11,11 @@ namespace Amity
         {
             X11.EndPoint = new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 6000);
             var xWindow = new X11();
-            xWindow.Show();
+            xWindow.KeyDown += k =>
+            {
+                
+            };
+            xWindow.Show(new Rectangle(0, 0, 600, 400));
             return;
 
             Console.WriteLine("Hello World!");
@@ -72,7 +76,7 @@ namespace Amity
                 window.Buffer[pos.X + pos.Y*window.ClientArea.Width] = Color.Green;
                 window.Invalidate();
             };
-            window.Show();
+            window.Show(new Rectangle(0, 0, 600, 400));
         }
     }
 }
