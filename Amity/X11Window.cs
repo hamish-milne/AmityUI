@@ -43,11 +43,11 @@ namespace Amity
 
 		public IntPtr BufferPtr => throw new NotImplementedException();
 
-		public Span<Color32> Buffer => throw new NotImplementedException();
+		public Span<Color32> Buffer => _buffer.AsSpan();
 
 		public Rectangle WindowArea => throw new NotImplementedException();
 
-		public Rectangle ClientArea => throw new NotImplementedException();
+		public Rectangle ClientArea => new Rectangle(0, 0, _width, _height);
 
 		public event Action<Point> MouseMove;
 		public event Action<int> MouseDown;
@@ -56,14 +56,11 @@ namespace Amity
 		public event Action Paint;
 		public event Action Draw;
 
-		private static X11.Protocol _connection;
+		private X11.Transport _connection;
 
 		public static EndPoint EndPoint { get; set; }
 
-		private static readonly Dictionary<uint, X11Window> _windows
-			= new Dictionary<uint, X11Window>();
-
-		private static X11.Protocol Connect()
+		private X11.Transport Connect()
 		{
 			if (_connection == null)
 			{
@@ -72,31 +69,102 @@ namespace Amity
 					GetServer(out var endPoint, out var _);
 					EndPoint = endPoint;
 				}
-				_connection = new X11.Protocol(EndPoint);
+				_connection = new X11.Transport(EndPoint);
 				_connection.ListenTo<X11.KeyEvent>(HandleKeyEvent);
-				_connection.Initialize();
+				_connection.ListenTo<X11.ResizeRequestEvent>(HandleResize);
+				_connection.ListenTo<X11.ConfigureNotify>(HandleResize);
+				//_connection.ListenTo<X11.MotionNotify>(HandleMouseMove);
+				_currentID = _connection.Info.ResourceIdBase;
+				_screen = _connection.Screens[0].Item1;
 			}
 			return _connection;
 		}
 
-		private static void HandleKeyEvent(X11.KeyEvent e)
+		private void HandleKeyEvent(X11.KeyEvent e)
 		{
-			if (_windows.TryGetValue(e.EventWindow, out var window))
+			if (e.IsDown)
 			{
-				if (e.IsDown)
-				{
-					window.KeyDown?.Invoke(e.Keycode);
-				} else {
-					window.KeyUp?.Invoke(e.Keycode);
-				}
+				KeyDown?.Invoke(e.Keycode);
+			} else {
+				KeyUp?.Invoke(e.Keycode);
 			}
 		}
+
+		private void HandleResize(X11.ResizeRequestEvent e)
+		{
+			CreateBuffer(e.Width, e.Height);
+		}
+
+		private void HandleResize(X11.ConfigureNotify e)
+		{
+			CreateBuffer(e.Rect.Width, e.Rect.Height);
+		}
+
+		private void HandleMouseMove(X11.MotionNotify e)
+		{
+			MouseMove?.Invoke(new Point(e.Data.EventX, e.Data.EventY));
+		}
+
+		private static uint _currentID;
+		private static X11.Screen _screen;
 
 		public void Show(Rectangle rect)
 		{
 			var c = Connect();
-			_windows[c.CreateWindow(rect)] = this;
+
+			_wId = ++_currentID;
+			c.Request(new X11.CreateWindow
+			{
+				Rect = (X11.Rect)rect,
+				Visual = _screen.RootVisual,
+				Parent = _screen.Root,
+				Depth = _screen.RootDepth,
+				WindowId = _wId,
+				Class = X11.WindowClass.InputOutput,
+			},
+			new X11.WindowValues
+			{
+				EventMask = X11.Event.KeyPress
+					| X11.Event.KeyRelease
+					| X11.Event.PointerMotion
+					| X11.Event.ResizeRedirect
+					| X11.Event.StructureNotify,
+				BackgroundPixel = 0x00FFFFFF,
+			});
+			c.Request(new X11.MapWindow
+			{
+				Window = _wId
+			});
+			c.Request(new X11.ClearArea
+			{
+				Window = _wId,
+				Rect = (X11.Rect)rect,
+			});
+			_gc = ++_currentID;
+			c.Request(new X11.CreateGC
+			{
+				ContextID = _gc,
+				Drawable = _wId,
+			},
+			new X11.GCValues
+			{
+			});
+			CreateBuffer((ushort)rect.Width, (ushort)rect.Height);
 			c.MessageLoop();
+		}
+
+		private uint _wId, _gc;
+		private Color32[] _buffer;
+		private ushort _width;
+		private ushort _height;
+
+		private void CreateBuffer(ushort width, ushort height)
+		{
+			_buffer = new Color32[width * height];
+			_width = width;
+			_height = height;
+			Paint?.Invoke();
+			Invalidate();
 		}
 
 		public IDrawingContext GetDrawingContext()
@@ -106,7 +174,37 @@ namespace Amity
 
 		public void Invalidate()
 		{
-			throw new NotImplementedException();
+			var c = Connect();
+			// There's a request size limit, so we need to upload the image
+			// a section at a time
+			var maxLinesPerRequest = c.Info.MaxRequestLength / (_width * 4);
+			if (maxLinesPerRequest <= 0)
+			{
+				// TODO: Better support for this case?
+				throw new Exception("Screen size is too big!");
+			}
+			for (int y = 0; y < _height; y += maxLinesPerRequest)
+			{
+				var thisHeight = maxLinesPerRequest;
+				if (_height - y < thisHeight) {
+					thisHeight = _height - y;
+				}
+				c.Request(new X11.PutImage
+				{
+					Format = X11.ImageFormat.ZPixmap,
+					Depth = 24,
+					Drawable = _wId,
+					GContext = _gc,
+					Width = _width,
+					Height = (ushort)thisHeight,
+					DstX = 0,
+					DstY = (short)y,
+				},
+				new X11.Image
+				{
+					ImageData = _buffer.AsMemory(y * _width, thisHeight * _width)
+				});
+			}
 		}
 	}
 }

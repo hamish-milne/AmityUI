@@ -15,7 +15,7 @@ namespace Amity
 			.Select(Activator.CreateInstance)
 			.Cast<IWindowAPI>()
 			.FirstOrDefault(w => w.IsSupported());
-		
+
 		private readonly IWindow _api;
 
 		public event Action<Point> MouseMove

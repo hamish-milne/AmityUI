@@ -7,25 +7,17 @@ namespace Amity
 {
     class Program
     {
-        static void Main(string[] args)
+        static unsafe void Main(string[] args)
         {
             X11Window.EndPoint = new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 6000);
-            var xWindow = new X11Window();
-            xWindow.KeyDown += k =>
-            {
-                Console.WriteLine(k);
-            };
-            Console.WriteLine("Showing window...");
-            xWindow.Show(new Rectangle(0, 0, 600, 400));
-            return;
-
             Console.WriteLine("Hello World!");
-            var window = new WindowBase();
+            var window = new X11Window();
             window.Paint += () =>
             {
-                /*var client = window.ClientArea;
+                var client = window.ClientArea;
                 var info = new SKImageInfo(client.Width, client.Height);
-                using (var surface = SKSurface.Create(info, window.BufferPtr, client.Width*4))
+                fixed (Color32* ptr = window.Buffer)
+                using (var surface = SKSurface.Create(info, (IntPtr)ptr, client.Width*4))
                 {
                     // the the canvas and properties
                     var canvas = surface.Canvas;
@@ -44,7 +36,7 @@ namespace Amity
                     };
                     var coord = new SKPoint(info.Width / 2, (info.Height + paint.TextSize) / 2);
                     canvas.DrawText("SkiaSharp", coord, paint);
-                }*/
+                }
 
                 // TEMP
                 /*Parallel.For(0, window.Buffer.Length, i =>
@@ -77,7 +69,7 @@ namespace Amity
                 window.Buffer[pos.X + pos.Y*window.ClientArea.Width] = Color.Green;
                 window.Invalidate();
             };
-            window.Show(new Rectangle(0, 0, 600, 400));
+            window.Show(new Rectangle(0, 0, 60, 40));
         }
     }
 }

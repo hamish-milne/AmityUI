@@ -12,7 +12,7 @@ namespace Amity
 	{
 		public bool IsSupported()
 			=> Environment.OSVersion.Platform == PlatformID.Win32NT;
-		
+
 		public IntPtr BufferPtr => _bitmap;
 		public unsafe Span<Color32> Buffer
 			=> new Span<Color32>((void*)_bitmap, _bitmapWidth * _bitmapHeight);
