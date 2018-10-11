@@ -1,7 +1,14 @@
 ﻿using System;
 using System.Threading.Tasks;
 using System.Drawing;
-using SkiaSharp;
+//using SkiaSharp;
+using System.Runtime.InteropServices;
+using PointF = SixLabors.Primitives.PointF;
+using System.Linq;
+using SixLabors.Fonts;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace Amity
 {
@@ -11,11 +18,21 @@ namespace Amity
         {
             X11Window.EndPoint = new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 6000);
             Console.WriteLine("Hello World!");
-            var window = new X11Window();
+            var window = new WindowBase();
             window.Paint += () =>
             {
                 var client = window.ClientArea;
-                var info = new SKImageInfo(client.Width, client.Height);
+                var memory = new Rgba32[client.Width * client.Height];
+                using (var image = Image.WrapMemory<Rgba32>(memory, client.Width, client.Height))
+                {
+                    image.Mutate(a => a.DrawText("ImageSharp",
+                        new Font(SystemFonts.Families.First(), 24f, FontStyle.Regular),
+                        NamedColors<Rgba32>.Red,
+                        new PointF(20, 20)));
+                }
+                MemoryMarshal.Cast<Rgba32, Color32>(memory.AsSpan()).CopyTo(window.Buffer);
+
+                /*var info = new SKImageInfo(client.Width, client.Height);
                 fixed (Color32* ptr = window.Buffer)
                 using (var surface = SKSurface.Create(info, (IntPtr)ptr, client.Width*4))
                 {
@@ -36,7 +53,7 @@ namespace Amity
                     };
                     var coord = new SKPoint(info.Width / 2, (info.Height + paint.TextSize) / 2);
                     canvas.DrawText("SkiaSharp", coord, paint);
-                }
+                }*/
 
                 // TEMP
                 /*Parallel.For(0, window.Buffer.Length, i =>
@@ -69,7 +86,7 @@ namespace Amity
                 window.Buffer[pos.X + pos.Y*window.ClientArea.Width] = Color.Green;
                 window.Invalidate();
             };
-            window.Show(new Rectangle(0, 0, 60, 40));
+            window.Show(new Rectangle(0, 0, 600, 400));
         }
     }
 }
