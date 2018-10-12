@@ -35,6 +35,7 @@ namespace Amity
 		void ArcSlice(Rectangle rect, float angleA, float angleB);
 		void Text(Point position, string font, string text);
 		ReadOnlySpan<string> Fonts { get; }
+		void Image(Span<byte> data, Size size, Point destination);
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 1)]

@@ -563,7 +563,7 @@ namespace Amity.X11
 			// Our data is in RGBA, but we want ARGB.
 			// Since A is ignored, we can do this efficiently by
 			// just shifting the output window right by one byte.
-			data.Slice(0, data.Length - 1).CopyTo(span.Slice(1));
+			data.Slice(1, data.Length - 1).CopyTo(span.Slice(0));
 			return MaxSize;
 		}
 	}

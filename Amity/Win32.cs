@@ -126,8 +126,8 @@ namespace Amity
 					MakeBuffer();
 					break;
 				case WM.PAINT:
-					BitBlt(_dstDc, 0, 0, _bitmapWidth, _bitmapHeight,
-						_srcDc, 0, 0, RasterOp.SRCCOPY);
+					/*BitBlt(_dstDc, 0, 0, _bitmapWidth, _bitmapHeight,
+						_srcDc, 0, 0, RasterOp.SRCCOPY);*/
 					Draw?.Invoke();
 					break;
 				case WM.MOUSEMOVE:
@@ -190,9 +190,6 @@ namespace Amity
 		public event Action Draw;
 
 		public Point MousePosition { get; private set; }
-
-		const int InitialWidth = 1800;
-		const int InitialHeight = 1000;
 
 		public void Show(Rectangle rect)
 		{
@@ -350,6 +347,30 @@ namespace Amity
 			public void Text(Point position, string font, string text)
 			{
 				throw new NotImplementedException();
+			}
+
+			public unsafe void Image(Span<byte> data, Size size, Point destination)
+			{
+				if (data.Length != (size.Width * size.Height * 4))
+				{
+					throw new ArgumentOutOfRangeException(
+						$"Buffer length {data.Length} doesn't match image size {size}");
+				}
+				var lpbmi = new BITMAPINFOHEADER
+				{
+					biSize = (uint)Marshal.SizeOf<BITMAPINFOHEADER>(),
+					biWidth = size.Width,
+					biHeight = size.Height,
+					biPlanes = 1,
+					biBitCount = 32,
+					biCompression = BI.RGB
+				};
+				fixed (byte* ptr = data)
+				{
+					ThrowError(SetDIBitsToDevice(_hdc, destination.X, destination.Y,
+						(uint)size.Width, (uint)size.Height, 0, 0, 0,
+						(uint)size.Height, (IntPtr)ptr, ref lpbmi, DIB.RGB_COLORS) == 0);
+				}
 			}
 		}
 
@@ -1096,6 +1117,22 @@ namespace Amity
 			IntPtr hwnd,
 			IntPtr lpRect,
 			int bErase
+		);
+
+		[DllImport(Gdi)]
+		private static extern int SetDIBitsToDevice(
+			IntPtr hdc,
+			int xDest,
+			int yDest,
+			uint w,
+			uint h,
+			int xSrc,
+			int ySrc,
+			uint StartScan,
+			uint cLines,
+			IntPtr lpvBits,
+			ref BITMAPINFOHEADER lpbmi,
+			DIB ColorUse
 		);
 
 #endregion pinvoke

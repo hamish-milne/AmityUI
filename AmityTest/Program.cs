@@ -18,19 +18,25 @@ namespace Amity
         {
             X11Window.EndPoint = new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 6000);
             Console.WriteLine("Hello World!");
-            var window = new WindowBase();
-            window.Paint += () =>
+            var window = new Win32();
+            window.Draw += () =>
             {
                 var client = window.ClientArea;
-                var memory = new Rgba32[client.Width * client.Height];
-                using (var image = Image.WrapMemory<Rgba32>(memory, client.Width, client.Height))
+                if (client.Width * client.Height == 0) { return; }
+                var memory = new Bgra32[client.Width * client.Height];
+                using (var image = Image.WrapMemory<Bgra32>(memory, client.Width, client.Height))
                 {
                     image.Mutate(a => a.DrawText("ImageSharp",
                         new Font(SystemFonts.Families.First(), 24f, FontStyle.Regular),
-                        NamedColors<Rgba32>.Red,
-                        new PointF(20, 20)));
+                        NamedColors<Bgra32>.Red,
+                        new PointF(0, 0)));
                 }
-                MemoryMarshal.Cast<Rgba32, Color32>(memory.AsSpan()).CopyTo(window.Buffer);
+                using (var dc = window.GetDrawingContext())
+                {
+                    dc.Image(MemoryMarshal.Cast<Bgra32, byte>(memory.AsSpan()),
+                        client.Size, new Point(0, 0));
+                }
+                //MemoryMarshal.Cast<Rgba32, Color32>(memory.AsSpan()).CopyTo(window.Buffer);
 
                 /*var info = new SKImageInfo(client.Width, client.Height);
                 fixed (Color32* ptr = window.Buffer)
@@ -71,7 +77,7 @@ namespace Amity
                     };
                 });*/
             };
-            window.Draw += () =>
+            /*window.Draw += () =>
             {
                 using (var dc = window.GetDrawingContext())
                 {
@@ -80,13 +86,13 @@ namespace Amity
                     dc.Brush = Color.AliceBlue;
                     dc.Rectangle(new Rectangle(new Point(50, 200), new Size(300, 200)));
                 }
-            };
+            };*/
             window.MouseMove += pos =>
             {
                 window.Buffer[pos.X + pos.Y*window.ClientArea.Width] = Color.Green;
                 window.Invalidate();
             };
-            window.Show(new Rectangle(0, 0, 600, 400));
+            window.Show(new Rectangle(0, 0, 400, 300));
         }
     }
 }
