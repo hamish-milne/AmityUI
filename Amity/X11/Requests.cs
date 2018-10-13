@@ -182,7 +182,7 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct CreateWindow : X11Request<WindowValues>
+	public struct CreateWindow : X11Request<ValuesMask<WindowValues>>
 	{
 		public byte Opcode => 1;
 		private byte _opcode;
@@ -194,6 +194,72 @@ namespace Amity.X11
 		public ushort BorderWidth;
 		public WindowClass Class;
 		public uint Visual;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Size = 8)]
+	public struct Optional<T> where T : struct
+	{
+		// Force the bool to take the first 4 bytes,
+		// rather than sometimes taking 1 depending on T.
+		private int _hasValue;
+		public bool HasValue
+		{
+			get => _hasValue != 0;
+			set => _hasValue = value ? 1 : 0;
+		}
+		public T Value;
+
+		public static implicit operator Optional<T>(T value)
+		{
+			return new Optional<T>
+			{
+				HasValue = true,
+				Value = value
+			};
+		}
+	}
+
+	public class ValuesMask<T> : IWritable where T : struct
+	{
+		public int MaxSize => (Marshal.SizeOf<T>() / 2) + sizeof(uint);
+
+		public T Values;
+
+		public unsafe int WriteTo(Span<byte> span)
+		{
+			var data = MemoryMarshal.Cast<byte, uint>(span);
+			const int elementSize = sizeof(uint);
+			var count = Marshal.SizeOf<T>() / (elementSize * 2);
+			if (count > 32)
+			{
+				throw new InvalidOperationException("Values struct was too big!");
+			}
+
+			// Prepare source data
+			Span<uint> src = stackalloc uint[count * 2];
+			MemoryMarshal.Write(MemoryMarshal.AsBytes(src), ref Values);
+
+			// Iterate over each Optional<T> value, and if it HasValue
+			// then add it to the mask and append its data.
+			var dstIdx = 0;
+			ref uint mask = ref data[dstIdx++];
+			mask = 0;
+			for (int i = 0; i < count; i++)
+			{
+				if (src[i*2 + 0] != 0)
+				{
+					mask |= (uint)(1 << i);
+					data[dstIdx++] = src[i*2 + 1];
+				}
+			}
+
+			return dstIdx * elementSize;
+		}
+
+		public static implicit operator ValuesMask<T>(T values)
+		{
+			return new ValuesMask<T> { Values = values };
+		}
 	}
 
 	public abstract class ValuesBase : IWritable
@@ -237,27 +303,28 @@ namespace Amity.X11
 		}
 	}
 
-	public class WindowValues : ValuesBase
+	[StructLayout(LayoutKind.Sequential, Pack = 8)]
+	public struct WindowValues
 	{
-		public uint? BackgroundPixmap;
-		public uint? BackgroundPixel;
-		public uint? BorderPixmap;
-		public uint? BorderPixel;
-		public byte? BitGravity;
-		public byte? WinGravity;
-		public BackingStoreType? BackingStore;
-		public uint? BackingPlanes;
-		public uint? BackingPixel;
-		public byte? OverrideRedirect;
-		public bool? SaveUnder;
-		public Event? EventMask;
-		public Event? DoNotPropagateMask;
-		public uint? Colormap;
-		public uint? Cursor;
+		public Optional<uint> BackgroundPixmap;
+		public Optional<uint> BackgroundPixel;
+		public Optional<uint> BorderPixmap;
+		public Optional<uint> BorderPixel;
+		public Optional<byte> BitGravity;
+		public Optional<byte> WinGravity;
+		public Optional<BackingStoreType> BackingStore;
+		public Optional<uint> BackingPlanes;
+		public Optional<uint> BackingPixel;
+		public Optional<byte> OverrideRedirect;
+		public Optional<bool> SaveUnder;
+		public Optional<Event> EventMask;
+		public Optional<Event> DoNotPropagateMask;
+		public Optional<uint> Colormap;
+		public Optional<uint> Cursor;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct ChangeWindowAttributes : X11Request<WindowValues>
+	public struct ChangeWindowAttributes : X11Request<ValuesMask<WindowValues>>
 	{
 		public byte Opcode => 2;
 		public uint Window;
@@ -378,19 +445,20 @@ namespace Amity.X11
 		Opposite
 	}
 
-	public class ConfigurationValues : ValuesBase
+	[StructLayout(LayoutKind.Sequential, Pack = 8)]
+	public struct ConfigurationValues
 	{
-		public short? X;
-		public short? Y;
-		public ushort? Width;
-		public ushort? Height;
-		public ushort? BorderWidth;
-		public uint? Sibling;
-		public StackMode? StackMode;
+		public Optional<short> X;
+		public Optional<short> Y;
+		public Optional<ushort> Width;
+		public Optional<ushort> Height;
+		public Optional<ushort> BorderWidth;
+		public Optional<uint> Sibling;
+		public Optional<StackMode> StackMode;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct ConfigureWindow : X11Request<ConfigurationValues>
+	public struct ConfigureWindow : X11Request<ValuesMask<ConfigurationValues>>
 	{
 		public byte Opcode => 12;
 		private uint _unused;
@@ -497,35 +565,36 @@ namespace Amity.X11
 		PieSlice
 	}
 
-	public class GCValues : ValuesBase
+	[StructLayout(LayoutKind.Sequential, Pack = 8)]
+	public struct GCValues
 	{
-		public GCFunction? Function;
-		public uint? PlaneMask;
-		public uint? Foreground;
-		public uint? Background;
-		public ushort? LineWidth;
-		public LineStyle? LineStyle;
-		public CapStyle? CapStyle;
-		public JoinStyle? JoinStyle;
-		public FillStyle? FillStyle;
-		public FillRule? FillRule;
-		public uint? Tile;
-		public uint? Stipple;
-		public short? TileStippleXOrigin;
-		public short? TileStippleYOrigin;
-		public uint? Font;
-		public SubwindowMode? SubwindowMode;
-		public bool? GraphicsExposures;
-		public short? ClipXOrigin;
-		public short? ClipYOrigin;
-		public uint? ClipMask;
-		public ushort? DashOffset;
-		public byte? Dashes;
-		public ArcMode? ArcMode;
+		public Optional<GCFunction> Function;
+		public Optional<uint> PlaneMask;
+		public Optional<Color32> Foreground;
+		public Optional<Color32> Background;
+		public Optional<ushort> LineWidth;
+		public Optional<LineStyle> LineStyle;
+		public Optional<CapStyle> CapStyle;
+		public Optional<JoinStyle> JoinStyle;
+		public Optional<FillStyle> FillStyle;
+		public Optional<FillRule> FillRule;
+		public Optional<uint> Tile;
+		public Optional<uint> Stipple;
+		public Optional<short> TileStippleXOrigin;
+		public Optional<short> TileStippleYOrigin;
+		public Optional<uint> Font;
+		public Optional<SubwindowMode> SubwindowMode;
+		public Optional<bool> GraphicsExposures;
+		public Optional<short> ClipXOrigin;
+		public Optional<short> ClipYOrigin;
+		public Optional<uint> ClipMask;
+		public Optional<ushort> DashOffset;
+		public Optional<byte> Dashes;
+		public Optional<ArcMode> ArcMode;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct CreateGC : X11Request<GCValues>
+	public struct CreateGC : X11Request<ValuesMask<GCValues>>
 	{
 		public byte Opcode => 55;
 		private uint _unused;

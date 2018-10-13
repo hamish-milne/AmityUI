@@ -163,6 +163,10 @@ namespace Amity.X11
 		{
 			if (hasRequestLength)
 			{
+				if ((_wBufferIdx % 4) != 0)
+				{
+					throw new Exception("Malformed request: length not a multiple of 4");
+				}
 				MemoryMarshal.Cast<byte, ushort>(_wBuffer.AsSpan())
 					[1] = (ushort)(_wBufferIdx / 4);
 			}
@@ -194,7 +198,7 @@ namespace Amity.X11
 			Write(data);
 			_wBuffer[0] = data.Opcode;
 			var startIdx = _wBufferIdx;
-			_wBufferIdx += extra.Length;
+			_wBufferIdx += extra.Length * Marshal.SizeOf<T1>();
 			Grow(ref _wBuffer, _wBufferIdx, _wBufferIdx > 0);
 			MemoryMarshal.Cast<T1, byte>(extra).CopyTo(_wBuffer.AsSpan(startIdx));
 			Send(true);

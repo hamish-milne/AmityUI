@@ -36,6 +36,7 @@ namespace Amity
                     //MemoryMarshal.Cast<Bgra32, Color32>(memory.AsSpan()).AlphaPremultiply();
                     dc.Image(MemoryMarshal.Cast<Bgra32, Color32>(memory.AsSpan()),
                         client.Size, new Point(0, 0));
+                    dc.Line(new Point(0, 0), new Point(200, 300));
                 }
                 //MemoryMarshal.Cast<Rgba32, Color32>(memory.AsSpan()).CopyTo(window.Buffer);
 

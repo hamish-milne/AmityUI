@@ -130,6 +130,7 @@ namespace Amity
 				WindowId = _wId,
 				Class = X11.WindowClass.InputOutput,
 			},
+			(X11.ValuesMask<X11.WindowValues>)
 			new X11.WindowValues
 			{
 				EventMask = X11.Event.KeyPress
@@ -155,8 +156,10 @@ namespace Amity
 				ContextID = _gc,
 				Drawable = _wId,
 			},
+			(X11.ValuesMask<X11.GCValues>)
 			new X11.GCValues
 			{
+				Foreground = (Color32)Color.Magenta,
 			});
 			CreateBuffer((ushort)rect.Width, (ushort)rect.Height);
 			c.MessageLoop();
