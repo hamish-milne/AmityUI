@@ -13,8 +13,6 @@ namespace Amity
 		event Action Paint;
 		event Action Draw;
 		Point MousePosition { get; }
-		IntPtr BufferPtr { get; }
-		Span<Color32> Buffer { get; }
 		Rectangle WindowArea { get; }
 		Rectangle ClientArea { get; }
 		void Show(Rectangle rect);
@@ -35,15 +33,15 @@ namespace Amity
 		void ArcSlice(Rectangle rect, float angleA, float angleB);
 		void Text(Point position, string font, string text);
 		ReadOnlySpan<string> Fonts { get; }
-		void Image(Span<byte> data, Size size, Point destination);
+		void Image(Span<Color32> data, Size size, Point destination);
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 1)]
 	public struct Color32
 	{
-		public byte R;
-		public byte G;
 		public byte B;
+		public byte G;
+		public byte R;
 		public byte A;
 
 		public static implicit operator Color(Color32 input)

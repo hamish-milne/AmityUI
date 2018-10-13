@@ -46,10 +46,6 @@ namespace Amity
 
 		public void Show(Rectangle rect) => _api.Show(rect);
 
-		public Span<Color32> Buffer => _api.Buffer;
-
-		public IntPtr BufferPtr => _api.BufferPtr;
-
 		public Point MousePosition => _api.MousePosition;
 
 		public IDrawingContext GetDrawingContext()

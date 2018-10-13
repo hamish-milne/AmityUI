@@ -2,7 +2,6 @@ namespace Amity
 {
 	using System;
 	using System.Drawing;
-	using System.Numerics;
 	using System.Runtime.InteropServices;
 	using static System.Runtime.InteropServices.UnmanagedType;
 	using System.Collections.Generic;
@@ -12,10 +11,6 @@ namespace Amity
 	{
 		public bool IsSupported()
 			=> Environment.OSVersion.Platform == PlatformID.Win32NT;
-
-		public IntPtr BufferPtr => _bitmap;
-		public unsafe Span<Color32> Buffer
-			=> new Span<Color32>((void*)_bitmap, _bitmapWidth * _bitmapHeight);
 
 		public Rectangle WindowArea
 		{
@@ -123,11 +118,9 @@ namespace Amity
 					PostQuitMessage(0);
 					break;
 				case WM.SIZE:
-					MakeBuffer();
+					// TODO: Resize event
 					break;
 				case WM.PAINT:
-					/*BitBlt(_dstDc, 0, 0, _bitmapWidth, _bitmapHeight,
-						_srcDc, 0, 0, RasterOp.SRCCOPY);*/
 					Draw?.Invoke();
 					break;
 				case WM.MOUSEMOVE:
@@ -139,47 +132,7 @@ namespace Amity
 			}
 		}
 
-		private void MakeBuffer()
-		{
-			var client = ClientArea;
-			var bitmapInfo = new BITMAPINFOHEADER
-			{
-				biSize = (uint)Marshal.SizeOf(typeof(BITMAPINFOHEADER)),
-				biWidth = client.Width,
-				biHeight = -client.Height,
-				biPlanes = 1,
-				biBitCount = 32,
-				biCompression = BI.RGB,
-			};
-			if (_srcDc == IntPtr.Zero) {
-				_dstDc = GetDC(_hwnd);
-				_srcDc = CreateCompatibleDC(_dstDc);
-			}
-
-			if (_bitmapObj != IntPtr.Zero)
-			{
-				DeleteObject(_bitmapObj);
-				_bitmapObj = IntPtr.Zero;
-			}
-			if (client.Width * client.Height <= 0)
-			{
-				return;
-			}
-			_bitmapObj = CreateDIBSection(_srcDc, ref bitmapInfo, DIB.RGB_COLORS,
-				out _bitmap, IntPtr.Zero, 0);
-			ThrowError(_bitmapObj == IntPtr.Zero || _bitmap == IntPtr.Zero);
-			_bitmapWidth = client.Width;
-			_bitmapHeight = client.Height;
-			SelectObject(_srcDc, _bitmapObj);
-			Paint?.Invoke();
-		}
-
 		private IntPtr _hwnd;
-		private IntPtr _bitmap;
-		private IntPtr _bitmapObj;
-		private int _bitmapWidth;
-		private int _bitmapHeight;
-		private IntPtr _srcDc;
 		private IntPtr _dstDc;
 
 		public event Action<Point> MouseMove;
@@ -226,8 +179,9 @@ namespace Amity
 			_instances[_hwnd] = this;
 
 			ShowWindow(_hwnd, 1);
+			_dstDc = GetDC(_hwnd);
 			
-			MakeBuffer();
+			// TODO: OnShow event?
 
 			while (GetMessage(out var msg, _hwnd, 0, 0) != 0)
 			{
@@ -264,14 +218,13 @@ namespace Amity
 				SelectObject(_hdc, GetStockObject(StockObjects.DC_BRUSH));
 			}
 
-			private Color32 ToColorRef(Color color)
+			private static ColorRef ToColorRef(Color color)
 			{
-				return new Color32
+				return new ColorRef
 				{
 					R = color.R,
 					G = color.G,
-					B = color.B,
-					A = 0, // Required by API
+					B = color.B
 				};
 			}
 
@@ -287,6 +240,7 @@ namespace Amity
 					}
 				}
 			}
+
 			public Color? Pen
 			{
 				get => GetDCPenColor(_hdc);
@@ -349,9 +303,9 @@ namespace Amity
 				throw new NotImplementedException();
 			}
 
-			public unsafe void Image(Span<byte> data, Size size, Point destination)
+			public unsafe void Image(Span<Color32> data, Size size, Point destination)
 			{
-				if (data.Length != (size.Width * size.Height * 4))
+				if (data.Length != (size.Width * size.Height))
 				{
 					throw new ArgumentOutOfRangeException(
 						$"Buffer length {data.Length} doesn't match image size {size}");
@@ -360,17 +314,28 @@ namespace Amity
 				{
 					biSize = (uint)Marshal.SizeOf<BITMAPINFOHEADER>(),
 					biWidth = size.Width,
-					biHeight = size.Height,
+					biHeight = -size.Height,
 					biPlanes = 1,
 					biBitCount = 32,
 					biCompression = BI.RGB
 				};
-				fixed (byte* ptr = data)
+				fixed (Color32* ptr = data)
 				{
 					ThrowError(SetDIBitsToDevice(_hdc, destination.X, destination.Y,
 						(uint)size.Width, (uint)size.Height, 0, 0, 0,
 						(uint)size.Height, (IntPtr)ptr, ref lpbmi, DIB.RGB_COLORS) == 0);
 				}
+			}
+		}
+
+		[StructLayout(LayoutKind.Sequential, Pack = 4)]
+		private struct ColorRef
+		{
+			public byte R, G, B;
+
+			public static implicit operator Color(ColorRef c)
+			{
+				return Color.FromArgb(c.R, c.G, c.B);
 			}
 		}
 
@@ -1014,24 +979,24 @@ namespace Amity
 		);
 
 		[DllImport(Gdi)]
-		private static extern Color32 SetDCPenColor(
+		private static extern ColorRef SetDCPenColor(
 			IntPtr hdc,
-			Color32 color
+			ColorRef color
 		);
 
 		[DllImport(Gdi)]
-		private static extern Color32 GetDCPenColor(
+		private static extern ColorRef GetDCPenColor(
 			IntPtr hdc
 		);
 
 		[DllImport(Gdi)]
-		private static extern Color32 SetDCBrushColor(
+		private static extern ColorRef SetDCBrushColor(
 			IntPtr hdc,
-			Color32 color
+			ColorRef color
 		);
 
 		[DllImport(Gdi)]
-		private static extern Color32 GetDCBrushColor(
+		private static extern ColorRef GetDCBrushColor(
 			IntPtr hdc
 		);
 

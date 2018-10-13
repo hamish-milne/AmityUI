@@ -544,6 +544,30 @@ namespace Amity.X11
 		public Rect Rect;
 	}
 
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct Point
+	{
+		public ushort X;
+		public ushort Y;
+	}
+
+	public enum CoordinateMode : byte
+	{
+		Origin,
+		Previous
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct PolyLine : X11RequestWithData<Point>
+	{
+		public byte Opcode => 66;
+		private byte _opcode;
+		public CoordinateMode CoordinateMode;
+		private ushort _requestLength;
+		public uint Drawable;
+		public uint GContext;
+	}
+
 	public enum ImageFormat : byte
 	{
 		Bitmap,
@@ -551,25 +575,9 @@ namespace Amity.X11
 		ZPixmap
 	}
 
-	public struct Image : IWritable
-	{
-		public Memory<Color32> ImageData;
-
-		public int MaxSize => ImageData.Length * 4;
-
-		public int WriteTo(Span<byte> span)
-		{
-			var data = MemoryMarshal.Cast<Color32, byte>(ImageData.Span);
-			// Our data is in RGBA, but we want ARGB.
-			// Since A is ignored, we can do this efficiently by
-			// just shifting the output window right by one byte.
-			data.Slice(1, data.Length - 1).CopyTo(span.Slice(0));
-			return MaxSize;
-		}
-	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 4)]
-	public struct PutImage : X11Request<Image>
+	public struct PutImage : X11RequestWithData<Color32>
 	{
 		public byte Opcode => 72;
 		private byte _opcode;

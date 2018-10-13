@@ -17,6 +17,11 @@ namespace Amity.X11
 	{
 	}
 
+	public interface X11RequestWithData<T> : X11RequestBase
+		where T : struct
+	{
+	}
+
 	public interface X11Request<TWritable> : X11RequestBase
 		where TWritable : IWritable
 	{
@@ -110,13 +115,23 @@ namespace Amity.X11
 		private byte[] _wBuffer;
 		private int _wBufferIdx;
 
+		private static void Grow<T>(ref T[] array, int sizeAtLeast, bool keepData)
+		{
+			const int padTo = 8;
+			sizeAtLeast += padTo - (sizeAtLeast % padTo);
+			if (keepData)
+			{
+				Array.Resize(ref array, sizeAtLeast);
+			} else if (array == null || array.Length < sizeAtLeast)
+			{
+				array = new T[sizeAtLeast];
+			}
+		}
+
 		public T Read<T>() where T : struct
 		{
 			var size = Marshal.SizeOf<T>();
-			if (_rBuffer == null || _rBuffer.Length < size)
-			{
-				_rBuffer = new byte[size];
-			}
+			Grow(ref _rBuffer, size, false);
 			_socket.Receive(_rBuffer, 0, size, SocketFlags.None);
 			return MemoryMarshal.Read<T>(_rBuffer.AsSpan(0, size));
 		}
@@ -124,10 +139,7 @@ namespace Amity.X11
 		public string ReadString(int len)
 		{
 			var size = len + Pad(len);
-			if (_rBuffer == null || _rBuffer.Length < size)
-			{
-				_rBuffer = new byte[size];
-			}
+			Grow(ref _rBuffer, size, false);
 			_socket.Receive(_rBuffer, size, SocketFlags.None);
 			return Encoding.UTF8.GetString(_rBuffer, 0, len);
 		}
@@ -135,7 +147,7 @@ namespace Amity.X11
 		private void Write<T>(in T obj) where T : struct
 		{
 			var size = Marshal.SizeOf<T>();
-			Array.Resize(ref _wBuffer, size + _wBufferIdx);
+			Grow(ref _wBuffer, size + _wBufferIdx, _wBufferIdx > 0);
 			var rObj = obj;
 			MemoryMarshal.Write(_wBuffer.AsSpan(_wBufferIdx), ref rObj);
 			_wBufferIdx += size;
@@ -143,7 +155,7 @@ namespace Amity.X11
 
 		private void Write(IWritable obj)
 		{
-			Array.Resize(ref _wBuffer, obj.MaxSize + _wBufferIdx);
+			Grow(ref _wBuffer, obj.MaxSize + _wBufferIdx, _wBufferIdx > 0);
 			_wBufferIdx += obj.WriteTo(_wBuffer.AsSpan(_wBufferIdx));
 		}
 
@@ -172,6 +184,19 @@ namespace Amity.X11
 			Write(data);
 			_wBuffer[0] = data.Opcode;
 			Write(extra);
+			Send(true);
+		}
+
+		public void Request<T, T1>(in T data, Span<T1> extra)
+			where T : struct, X11RequestWithData<T1>
+			where T1 : struct
+		{
+			Write(data);
+			_wBuffer[0] = data.Opcode;
+			var startIdx = _wBufferIdx;
+			_wBufferIdx += extra.Length;
+			Grow(ref _wBuffer, _wBufferIdx, _wBufferIdx > 0);
+			MemoryMarshal.Cast<T1, byte>(extra).CopyTo(_wBuffer.AsSpan(startIdx));
 			Send(true);
 		}
 

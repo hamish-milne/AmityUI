@@ -18,7 +18,7 @@ namespace Amity
         {
             X11Window.EndPoint = new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 6000);
             Console.WriteLine("Hello World!");
-            var window = new Win32();
+            var window = new X11Window();
             window.Draw += () =>
             {
                 var client = window.ClientArea;
@@ -33,7 +33,8 @@ namespace Amity
                 }
                 using (var dc = window.GetDrawingContext())
                 {
-                    dc.Image(MemoryMarshal.Cast<Bgra32, byte>(memory.AsSpan()),
+                    //MemoryMarshal.Cast<Bgra32, Color32>(memory.AsSpan()).AlphaPremultiply();
+                    dc.Image(MemoryMarshal.Cast<Bgra32, Color32>(memory.AsSpan()),
                         client.Size, new Point(0, 0));
                 }
                 //MemoryMarshal.Cast<Rgba32, Color32>(memory.AsSpan()).CopyTo(window.Buffer);
@@ -89,10 +90,11 @@ namespace Amity
             };*/
             window.MouseMove += pos =>
             {
-                window.Buffer[pos.X + pos.Y*window.ClientArea.Width] = Color.Green;
-                window.Invalidate();
+                
+                //window.Buffer[pos.X + pos.Y*window.ClientArea.Width] = Color.Green;
+                //window.Invalidate();
             };
-            window.Show(new Rectangle(0, 0, 400, 300));
+            window.Show(new Rectangle(0, 0, 200, 100));
         }
     }
 }

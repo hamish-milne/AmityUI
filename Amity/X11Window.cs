@@ -6,6 +6,8 @@ namespace Amity
 	using System.Linq;
 	using System.Drawing;
 	using System.Collections.Generic;
+	using X11;
+	using Point = System.Drawing.Point;
 
 	// From https://www.x.org/docs/XProtocol/proto.pdf
 
@@ -73,11 +75,17 @@ namespace Amity
 				_connection.ListenTo<X11.KeyEvent>(HandleKeyEvent);
 				_connection.ListenTo<X11.ResizeRequestEvent>(HandleResize);
 				_connection.ListenTo<X11.ConfigureNotify>(HandleResize);
-				//_connection.ListenTo<X11.MotionNotify>(HandleMouseMove);
+				_connection.ListenTo<X11.Expose>(HandleExpose);
+				_connection.ListenTo<X11.MotionNotify>(HandleMouseMove);
 				_currentID = _connection.Info.ResourceIdBase;
 				_screen = _connection.Screens[0].Item1;
 			}
 			return _connection;
+		}
+
+		private void HandleExpose(X11.Expose e)
+		{
+			Draw?.Invoke();
 		}
 
 		private void HandleKeyEvent(X11.KeyEvent e)
@@ -128,7 +136,8 @@ namespace Amity
 					| X11.Event.KeyRelease
 					| X11.Event.PointerMotion
 					| X11.Event.ResizeRedirect
-					| X11.Event.StructureNotify,
+					| X11.Event.StructureNotify
+					| X11.Event.Exposure,
 				BackgroundPixel = 0x00FFFFFF,
 			});
 			c.Request(new X11.MapWindow
@@ -169,41 +178,116 @@ namespace Amity
 
 		public IDrawingContext GetDrawingContext()
 		{
-			throw new NotImplementedException();
+			return new DrawingContext(this);
 		}
 
 		public void Invalidate()
 		{
-			var c = Connect();
-			// There's a request size limit, so we need to upload the image
-			// a section at a time
-			var maxLinesPerRequest = c.Info.MaxRequestLength / (_width * 4);
-			if (maxLinesPerRequest <= 0)
+		}
+
+		private class DrawingContext : IDrawingContext
+		{
+			public Color? Brush { get; set; }
+			public Color? Pen { get; set; }
+
+			private X11Window _parent;
+
+			public DrawingContext(X11Window parent)
 			{
-				// TODO: Better support for this case?
-				throw new Exception("Screen size is too big!");
+				_parent = parent;
 			}
-			for (int y = 0; y < _height; y += maxLinesPerRequest)
+
+			public ReadOnlySpan<string> Fonts => throw new NotImplementedException();
+
+			public void ArcChord(Rectangle rect, float angleA, float angleB)
 			{
-				var thisHeight = maxLinesPerRequest;
-				if (_height - y < thisHeight) {
-					thisHeight = _height - y;
+				throw new NotImplementedException();
+			}
+
+			public void ArcSlice(Rectangle rect, float angleA, float angleB)
+			{
+				throw new NotImplementedException();
+			}
+
+			public void BeginPolygon()
+			{
+				throw new NotImplementedException();
+			}
+
+			public void Dispose()
+			{
+			}
+
+			public void EndPolygon(bool forceClose)
+			{
+				throw new NotImplementedException();
+			}
+
+			public void Image(Span<Color32> data, Size size, Point destination)
+			{
+				var c = _parent.Connect();
+				// There's a request size limit, so we need to upload the image
+				// a section at a time
+				var maxLinesPerRequest = c.Info.MaxRequestLength / (size.Width * 4);
+				if (maxLinesPerRequest <= 0)
+				{
+					// TODO: Better support for this case?
+					throw new Exception("Screen size is too big!");
 				}
-				c.Request(new X11.PutImage
+				for (int y = 0; y < size.Height; y += maxLinesPerRequest)
 				{
-					Format = X11.ImageFormat.ZPixmap,
-					Depth = 24,
-					Drawable = _wId,
-					GContext = _gc,
-					Width = _width,
-					Height = (ushort)thisHeight,
-					DstX = 0,
-					DstY = (short)y,
+					var thisHeight = maxLinesPerRequest;
+					if (size.Height - y < thisHeight) {
+						thisHeight = size.Height - y;
+					}
+					c.Request(new X11.PutImage
+					{
+						Format = X11.ImageFormat.ZPixmap,
+						Depth = 24,
+						Drawable = _parent._wId,
+						GContext = _parent._gc,
+						Width = (ushort)size.Width,
+						Height = (ushort)thisHeight,
+						DstX = (short)destination.X,
+						DstY = (short)(destination.Y + y),
+					},
+					data.Slice(y * size.Width, thisHeight * size.Width));
+				}
+			}
+
+			public void Pixel(Point p)
+			{
+				throw new NotImplementedException();
+			}
+
+			public void Line(Point a, Point b)
+			{
+				var c = _parent.Connect();
+				Span<X11.Point> points = stackalloc X11.Point[2];
+				points[0] = new X11.Point{X = (ushort)a.X, Y = (ushort)a.Y};
+				points[1] = new X11.Point{X = (ushort)b.X, Y = (ushort)b.Y};
+				c.Request(new PolyLine
+				{
+					CoordinateMode = CoordinateMode.Origin,
+					Drawable = _parent._wId,
+					GContext = _parent._gc,
 				},
-				new X11.Image
-				{
-					ImageData = _buffer.AsMemory(y * _width, thisHeight * _width)
-				});
+				points);
+			}
+
+			public void PushPoint(Point next)
+			{
+				throw new NotImplementedException();
+			}
+
+			public void Rectangle(Rectangle rect)
+			{
+				throw new NotImplementedException();
+			}
+
+			public void Text(Point position, string font, string text)
+			{
+				throw new NotImplementedException();
 			}
 		}
 	}
