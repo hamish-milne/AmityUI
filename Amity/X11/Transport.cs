@@ -215,14 +215,14 @@ namespace Amity.X11
 			reply = ReadReply<TReply>();
 		}
 
-		public void Request<T, TReply, TReplyData>(in T data, out (TReply, TReplyData) reply)
+		public void Request<T, TReply, TReplyData>(in T data, out TReply reply, out TReplyData replyData)
 			where T : unmanaged, X11RequestReply<TReply>
 			where TReply : unmanaged, X11Reply<TReplyData>
 		{
 			Write(data);
 			_wBuffer[0] = data.Opcode;
 			Send(true);
-			reply = ReadReply<TReply, TReplyData>();
+			(reply, replyData) = ReadReply<TReply, TReplyData>();
 		}
 		
 		public void Request<T, TData, TReply>(in T data, TData extra, out TReply reply)
@@ -234,6 +234,18 @@ namespace Amity.X11
 			WriteIndirect(data, extra);
 			Send(true);
 			reply = ReadReply<TReply>();
+		}
+		
+		public void Request<T, TData, TReply, TReplyData>(
+			in T data, TData extra, out TReply reply, out TReplyData replyData)
+			where T : unmanaged, X11DataRequestReply<TData, TReply>
+			where TReply : unmanaged, X11Reply<TReplyData>
+		{
+			Write(data);
+			_wBuffer[0] = data.Opcode;
+			WriteIndirect(data, extra);
+			Send(true);
+			(reply, replyData) = ReadReply<TReply, TReplyData>();
 		}
 		
 		public void Dispose()
@@ -292,8 +304,10 @@ namespace Amity.X11
 			where T : unmanaged, X11Reply<TData>
 		{
 			var reply = ReadReply<T>();
-			Grow(ref _rBuffer, reply.ExpectedLength, false);
-			var data = reply.Read(_rBuffer);
+			var len = reply.ExpectedLength;
+			Grow(ref _rBuffer, len, false);
+			_socket.Receive(_rBuffer, len, SocketFlags.None);
+			var data = reply.Read(_rBuffer.AsSpan(0, len));
 			return (reply, data);
 		}
 

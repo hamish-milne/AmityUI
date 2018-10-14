@@ -4,6 +4,7 @@ namespace Amity.X11
 	using System.Runtime.InteropServices;
 	using System.Drawing;
 	using System.Text;
+	using System.Collections.Generic;
 	using static System.Runtime.InteropServices.UnmanagedType;
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -611,12 +612,7 @@ namespace Amity.X11
 			private uint _valueLength;
 
 			public int ExpectedLength => (int)_valueLength * (Format / 8);
-			public byte[] Read(Span<byte> data)
-			{
-				var ret = new byte[ExpectedLength];
-				data.Slice(0, ret.Length).CopyTo(ret);
-				return ret;
-			}
+			public byte[] Read(Span<byte> data) => data.ToArray();
 		}
 	}
 
@@ -636,13 +632,8 @@ namespace Amity.X11
 			private ushort _atomsCount;
 
 			public int ExpectedLength => _atomsCount * sizeof(uint);
-			public uint[] Read(Span<byte> data)
-			{
-				var ret = new uint[_atomsCount];
-				data.Slice(0, ExpectedLength)
-					.CopyTo(MemoryMarshal.AsBytes(ret.AsSpan()));
-				return ret;
-			}
+			public uint[] Read(Span<byte> data) =>
+				MemoryMarshal.Cast<byte, uint>(data).ToArray();
 		}
 	}
 
@@ -748,6 +739,49 @@ namespace Amity.X11
 	public struct UngrabServer : X11Request
 	{
 		public byte Opcode => 37;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct ListFonts : X11DataRequestReply<string, ListFonts.Reply>
+	{
+		public byte Opcode => 49;
+		private uint _unused;
+		public ushort MaxNames;
+		private ushort _patternLength;
+
+		public int MaxSize => 65535;
+
+		public int WriteTo(in string data, Span<byte> output, Span<byte> rData)
+		{
+			var count = data.WriteOut(output);
+			MemoryMarshal.Cast<byte, ushort>(rData)[3] = (ushort)count;
+			return count;
+		}
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2)]
+		public struct Reply : X11Reply<List<string>>
+		{
+			private ushort _unused;
+			public ushort SequenceNumber;
+			private uint _replyLength;
+			private ushort _namesCount;
+
+			public int ExpectedLength => (int)_replyLength * sizeof(uint);
+
+			public unsafe List<string> Read(Span<byte> data)
+			{
+				var ret = new List<string>();
+				for (int i = 0; (data.Length - i) >= 4; i++)
+				{
+					var span = data.Slice(i+1, data[i]);
+					fixed (byte* ptr = span)
+						ret.Add(Encoding.UTF8.GetString(ptr, span.Length));
+					i += data[i];
+				}
+				return ret;
+			}
+		}
+
 	}
 
 	public enum GCFunction : byte

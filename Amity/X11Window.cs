@@ -7,6 +7,7 @@ namespace Amity
 	using System.Drawing;
 	using X11;
 	using Point = System.Drawing.Point;
+	using System.Collections.Generic;
 
 	// From https://www.x.org/docs/XProtocol/proto.pdf
 
