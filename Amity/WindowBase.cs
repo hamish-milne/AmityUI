@@ -26,10 +26,10 @@ namespace Amity
 		public event Action<int> MouseDown;
 		public event Action<int> KeyDown;
 		public event Action<int> KeyUp;
-		public event Action Paint
+		public event Action Resize
 		{
-			add => _api.Paint += value;
-			remove => _api.Paint -= value;
+			add => _api.Resize += value;
+			remove => _api.Resize -= value;
 		}
 		public event Action Draw
 		{

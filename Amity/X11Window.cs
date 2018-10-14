@@ -5,7 +5,6 @@ namespace Amity
 	using System.Text.RegularExpressions;
 	using System.Linq;
 	using System.Drawing;
-	using System.Collections.Generic;
 	using X11;
 	using Point = System.Drawing.Point;
 
@@ -43,10 +42,6 @@ namespace Amity
 
 		public Point MousePosition => throw new NotImplementedException();
 
-		public IntPtr BufferPtr => throw new NotImplementedException();
-
-		public Span<Color32> Buffer => _buffer.AsSpan();
-
 		public Rectangle WindowArea => throw new NotImplementedException();
 
 		public Rectangle ClientArea => new Rectangle(0, 0, _width, _height);
@@ -55,7 +50,7 @@ namespace Amity
 		public event Action<int> MouseDown;
 		public event Action<int> KeyDown;
 		public event Action<int> KeyUp;
-		public event Action Paint;
+		public event Action Resize;
 		public event Action Draw;
 
 		private X11.Transport _connection;
@@ -130,7 +125,6 @@ namespace Amity
 				WindowId = _wId,
 				Class = X11.WindowClass.InputOutput,
 			},
-			(X11.ValuesMask<X11.WindowValues>)
 			new X11.WindowValues
 			{
 				EventMask = X11.Event.KeyPress
@@ -156,7 +150,6 @@ namespace Amity
 				ContextID = _gc,
 				Drawable = _wId,
 			},
-			(X11.ValuesMask<X11.GCValues>)
 			new X11.GCValues
 			{
 				Foreground = (Color32)Color.Magenta,
@@ -166,17 +159,15 @@ namespace Amity
 		}
 
 		private uint _wId, _gc;
-		private Color32[] _buffer;
 		private ushort _width;
 		private ushort _height;
 
 		private void CreateBuffer(ushort width, ushort height)
 		{
-			_buffer = new Color32[width * height];
 			_width = width;
 			_height = height;
-			Paint?.Invoke();
-			Invalidate();
+			Resize?.Invoke();
+			Draw?.Invoke();
 		}
 
 		public IDrawingContext GetDrawingContext()

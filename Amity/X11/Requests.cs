@@ -1,9 +1,9 @@
 namespace Amity.X11
 {
 	using System;
-	using System.Reflection;
 	using System.Runtime.InteropServices;
 	using System.Drawing;
+	using System.Text;
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct Rect
@@ -182,7 +182,7 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct CreateWindow : X11Request<ValuesMask<WindowValues>>
+	public struct CreateWindow : X11Request<WindowValues>
 	{
 		public byte Opcode => 1;
 		private byte _opcode;
@@ -194,10 +194,14 @@ namespace Amity.X11
 		public ushort BorderWidth;
 		public WindowClass Class;
 		public uint Visual;
+
+		public int MaxSize => ValuesMask.MaxSize<WindowValues>();
+		public int WriteTo(in WindowValues data, Span<byte> output) =>
+			ValuesMask.WriteTo(data, output);
 	}
 
 	[StructLayout(LayoutKind.Sequential, Size = 8)]
-	public struct Optional<T> where T : struct
+	public struct Optional<T> where T : unmanaged
 	{
 		// Force the bool to take the first 4 bytes,
 		// rather than sometimes taking 1 depending on T.
@@ -219,13 +223,23 @@ namespace Amity.X11
 		}
 	}
 
-	public class ValuesMask<T> : IWritable where T : struct
+	public static class ValuesMask
 	{
-		public int MaxSize => (Marshal.SizeOf<T>() / 2) + sizeof(uint);
+		public static int MaxSize<T>()  where T : struct =>
+			(Marshal.SizeOf<T>() / 2) + sizeof(uint);
 
-		public T Values;
 
-		public unsafe int WriteTo(Span<byte> span)
+		// NB: This only works for arguments! If you pass in a field ref here
+		// it *will* crash the program.
+		private static unsafe ReadOnlySpan<T> StructToBytes<T>(in T value)
+			where T : unmanaged
+		{
+			fixed (T* ptr = &value)
+				return new ReadOnlySpan<T>(ptr, 1);
+		}
+
+		public static unsafe int WriteTo<T>(in T values, Span<byte> span)
+			where T : struct
 		{
 			var data = MemoryMarshal.Cast<byte, uint>(span);
 			const int elementSize = sizeof(uint);
@@ -235,9 +249,17 @@ namespace Amity.X11
 				throw new InvalidOperationException("Values struct was too big!");
 			}
 
-			// Prepare source data
+			// Prepare source data:
+	
+			// This doesn't work, because Optional<T> is considered 
+			// non-blittable because it's generic? :wat:
+			//var src = MemoryMarshal.Cast<T, uint>(StructToBytes(values));
+			// So instead we need to copy twice..
 			Span<uint> src = stackalloc uint[count * 2];
-			MemoryMarshal.Write(MemoryMarshal.AsBytes(src), ref Values);
+			{
+				T rValues = values;
+				MemoryMarshal.Write(MemoryMarshal.AsBytes(src), ref rValues);
+			}
 
 			// Iterate over each Optional<T> value, and if it HasValue
 			// then add it to the mask and append its data.
@@ -254,52 +276,6 @@ namespace Amity.X11
 			}
 
 			return dstIdx * elementSize;
-		}
-
-		public static implicit operator ValuesMask<T>(T values)
-		{
-			return new ValuesMask<T> { Values = values };
-		}
-	}
-
-	public abstract class ValuesBase : IWritable
-	{
-		public delegate void WriteObject(Span<byte> dst, object obj);
-
-		private static void Write<T>(Span<byte> dst, object obj) where T : struct
-		{
-			var i = (T)obj;
-			MemoryMarshal.Write(dst, ref i);
-		}
-
-		private static MethodInfo _writeMethod =
-			((WriteObject)Write<int>).Method.GetGenericMethodDefinition();
-		
-		public int MaxSize => (1 + 32)*sizeof(int);
-
-		public int WriteTo(Span<byte> data)
-		{
-			const int elementSize = 4;
-			int totalSize = sizeof(uint);
-			uint mask = 0;
-			var fields = GetType().GetFields();
-			var dst = data.Slice(sizeof(uint));
-			for (int i = 0; i < fields.Length; i++)
-			{
-				var obj = fields[i].GetValue(this);
-				if (obj != null)
-				{
-					mask |= (uint)(1 << i);
-					var method = _writeMethod.MakeGenericMethod(obj.GetType());
-					var del = (WriteObject)Delegate.CreateDelegate(
-						typeof(WriteObject), null, method);
-					del(dst, obj);
-					dst = dst.Slice(elementSize);
-					totalSize += elementSize;
-				}
-			}
-			MemoryMarshal.Write(data, ref mask);
-			return totalSize;
 		}
 	}
 
@@ -324,10 +300,14 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct ChangeWindowAttributes : X11Request<ValuesMask<WindowValues>>
+	public struct ChangeWindowAttributes : X11Request<WindowValues>
 	{
 		public byte Opcode => 2;
 		public uint Window;
+
+		public int MaxSize => ValuesMask.MaxSize<WindowValues>();
+		public int WriteTo(in WindowValues data, Span<byte> output) =>
+			ValuesMask.WriteTo(data, output);
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -458,11 +438,15 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct ConfigureWindow : X11Request<ValuesMask<ConfigurationValues>>
+	public struct ConfigureWindow : X11Request<ConfigurationValues>
 	{
 		public byte Opcode => 12;
 		private uint _unused;
 		public uint Window;
+
+		public int MaxSize => ValuesMask.MaxSize<ConfigurationValues>();
+		public int WriteTo(in ConfigurationValues data, Span<byte> output) =>
+			ValuesMask.WriteTo(data, output);
 	}
 
 	public enum CirculateDirection : byte
@@ -495,6 +479,100 @@ namespace Amity.X11
 		public byte Opcode => 15;
 		private uint _unused;
 		public uint Window;
+	}
+
+	public static class Util
+	{
+		public static unsafe int WriteOut(
+			this string str, Span<byte> output)
+		{
+			fixed (char* cPtr = str)
+			fixed (byte* ptr = output)
+			{
+				return (ushort)Encoding.UTF8.GetBytes(
+					cPtr, str.Length, ptr, output.Length);
+			}
+		}
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct InternAtom : X11Request<string>
+	{
+		public byte Opcode => 16;
+		private byte _opcode;
+		[MarshalAs(UnmanagedType.U1)] public bool OnlyIfExists;
+		private ushort _requestLength;
+
+		public int MaxSize => 65535; // TODO: String length
+		public unsafe int WriteTo(in string data, Span<byte> output)
+		{
+			var str = data ?? string.Empty;
+			var byteCount = data.WriteOut(output.Slice(4));
+			MemoryMarshal.Cast<byte, ushort>(output)[0] = (ushort)byteCount;
+			return 4 + byteCount;
+		}
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct GetAtomName : X11RequestReplyWithData<GetAtomNameReply, string>
+	{
+		public byte Opcode => 17;
+		private uint _unused;
+		public uint Atom;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2, Size = 32)]
+	public struct GetAtomNameReply : X11Reply<string>
+	{
+		private uint _unused;
+		private uint _replyLength;
+		private ushort _nameLength;
+
+		public unsafe string Read(Span<byte> data)
+		{
+			fixed (byte* src = data)
+				return System.Text.Encoding.UTF8.GetString(src, data.Length);
+		}
+	}
+
+	public enum PropertyMode : byte
+	{
+		Replace,
+		Prepend,
+		Append
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct ChangeProperty : X11Request<Memory<byte>>
+	{
+		public byte Opcode => 18;
+		private byte _opcode;
+		public PropertyMode Mode;
+		private ushort _requestLength;
+		public uint Window;
+		public uint Property;
+		public uint Type;
+		public byte Format;
+		private ushort _unused;
+		
+		public int MaxSize => 65535;
+		public int WriteTo(in Memory<byte> data, Span<byte> output)
+		{
+			switch (Format)
+			{
+				case 8:
+				case 16:
+				case 32:
+					break;
+				default:
+					throw new ArgumentException(
+						$"Format unit {Format} not supported");
+			}
+			MemoryMarshal.Cast<byte, uint>(output)[0] =
+				(uint)(data.Length / (Format / 8));
+			data.Span.CopyTo(output.Slice(4));
+			return data.Length + 4;
+		}
 	}
 
 	public enum GCFunction : byte
@@ -594,12 +672,16 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct CreateGC : X11Request<ValuesMask<GCValues>>
+	public struct CreateGC : X11Request<GCValues>
 	{
 		public byte Opcode => 55;
 		private uint _unused;
 		public uint ContextID;
 		public uint Drawable;
+
+		public int MaxSize => ValuesMask.MaxSize<GCValues>();
+		public int WriteTo(in GCValues data, Span<byte> output) =>
+			ValuesMask.WriteTo(data, output);
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]

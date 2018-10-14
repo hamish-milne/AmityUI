@@ -10,7 +10,7 @@ namespace Amity
 		event Action<int> MouseDown;
 		event Action<int> KeyDown;
 		event Action<int> KeyUp;
-		event Action Paint;
+		event Action Resize;
 		event Action Draw;
 		Point MousePosition { get; }
 		Rectangle WindowArea { get; }
@@ -49,5 +49,19 @@ namespace Amity
 		
 		public static implicit operator Color32(Color input)
 			=> new Color32 { R = input.R, G = input.G, B = input.B, A = input.A };
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 1)]
+	public struct Color24
+	{
+		public byte B;
+		public byte G;
+		public byte R;
+
+		public static implicit operator Color(Color24 input)
+			=> Color.FromArgb(input.R, input.G, input.B);
+		
+		public static implicit operator Color24(Color input)
+			=> new Color24 { R = input.R, G = input.G, B = input.B };
 	}
 }

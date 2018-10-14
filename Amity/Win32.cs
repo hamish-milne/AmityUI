@@ -55,12 +55,14 @@ namespace Amity
 						IntPtr.Zero);
 					if (ret <= 0)
 					{
-						throw new Exception($"Error code {code} (format message failed)");
+						throw new Exception(
+							$"Error code {code} (format message failed)");
 					} else {
 						throw new Exception(lpBuffer);
 					}
 				}
-				throw new Exception("Something went wrong, but no error code was set");
+				throw new Exception(
+					"Something went wrong, but no error code was set");
 			}
 		}
 
@@ -118,7 +120,7 @@ namespace Amity
 					PostQuitMessage(0);
 					break;
 				case WM.SIZE:
-					// TODO: Resize event
+					Resize?.Invoke();
 					break;
 				case WM.PAINT:
 					Draw?.Invoke();
@@ -139,14 +141,15 @@ namespace Amity
 		public event Action<int> MouseDown;
 		public event Action<int> KeyDown;
 		public event Action<int> KeyUp;
-		public event Action Paint;
+		public event Action Resize;
 		public event Action Draw;
 
 		public Point MousePosition { get; private set; }
 
 		public void Show(Rectangle rect)
 		{
-			SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT.PER_MONITOR_AWARE_V2);
+			SetProcessDpiAwarenessContext(
+				DPI_AWARENESS_CONTEXT.PER_MONITOR_AWARE_V2);
 			var hInstance = GetModuleHandle(null);
 			var wndClass = new WNDCLASSEXW
 			{
@@ -180,8 +183,7 @@ namespace Amity
 
 			ShowWindow(_hwnd, 1);
 			_dstDc = GetDC(_hwnd);
-			
-			// TODO: OnShow event?
+			Resize?.Invoke();
 
 			while (GetMessage(out var msg, _hwnd, 0, 0) != 0)
 			{
@@ -193,7 +195,8 @@ namespace Amity
 				}
 				if (_exceptionFromCallback != null)
 				{
-					throw new Exception("Exception in callback", _exceptionFromCallback);
+					throw new Exception(
+						"Exception in callback", _exceptionFromCallback);
 				}
 			}
 		}
@@ -218,43 +221,45 @@ namespace Amity
 				SelectObject(_hdc, GetStockObject(StockObjects.DC_BRUSH));
 			}
 
-			private static ColorRef ToColorRef(Color color)
-			{
-				return new ColorRef
-				{
-					R = color.R,
-					G = color.G,
-					B = color.B
-				};
-			}
+			private static Color ToColor(uint cr) =>
+				Color.FromArgb((byte)(cr), (byte)(cr >> 8), (byte)(cr >> 16));
+
+			private static uint ToColorRef(Color color) =>
+				(uint)((color.R) | (color.G << 8) | (color.B << 16));
 
 			public Color? Brush
 			{
-				get => GetDCBrushColor(_hdc);
+				get => ToColor(GetDCBrushColor(_hdc));
 				set
 				{
-					SelectObject(_hdc, GetStockObject(value == null
-						? StockObjects.NULL_BRUSH : StockObjects.DC_BRUSH));
+					ThrowError(SelectObject(_hdc, GetStockObject(value == null
+						? StockObjects.NULL_BRUSH : StockObjects.DC_BRUSH))
+						== IntPtr.Zero);
 					if (value.HasValue) {
-						SetDCBrushColor(_hdc, ToColorRef(value.Value));
+						ThrowError(
+							SetDCBrushColor(_hdc, ToColorRef(value.Value))
+							== uint.MaxValue);
 					}
 				}
 			}
 
 			public Color? Pen
 			{
-				get => GetDCPenColor(_hdc);
+				get => ToColor(GetDCPenColor(_hdc));
 				set
 				{
-					SelectObject(_hdc, GetStockObject(value == null
-						? StockObjects.NULL_PEN : StockObjects.DC_PEN));
+					ThrowError(SelectObject(_hdc, GetStockObject(value == null
+						? StockObjects.NULL_PEN : StockObjects.DC_PEN))
+						== IntPtr.Zero);
 					if (value.HasValue) {
-						SetDCPenColor(_hdc, ToColorRef(value.Value));
+						ThrowError(SetDCPenColor(_hdc, ToColorRef(value.Value))
+						== uint.MaxValue);
 					}
 				}
 			}
 
-			public ReadOnlySpan<string> Fonts => throw new NotImplementedException();
+			public ReadOnlySpan<string> Fonts
+				=> throw new NotImplementedException();
 
 			public void ArcChord(Rectangle rect, float angleA, float angleB)
 			{
@@ -303,12 +308,13 @@ namespace Amity
 				throw new NotImplementedException();
 			}
 
-			public unsafe void Image(Span<Color32> data, Size size, Point destination)
+			public unsafe void Image(
+				Span<Color32> data, Size size, Point destination)
 			{
 				if (data.Length != (size.Width * size.Height))
 				{
 					throw new ArgumentOutOfRangeException(
-						$"Buffer length {data.Length} doesn't match image size {size}");
+			$"Buffer length {data.Length} doesn't match image size {size}");
 				}
 				var lpbmi = new BITMAPINFOHEADER
 				{
@@ -321,21 +327,12 @@ namespace Amity
 				};
 				fixed (Color32* ptr = data)
 				{
-					ThrowError(SetDIBitsToDevice(_hdc, destination.X, destination.Y,
+					ThrowError(SetDIBitsToDevice(
+						_hdc, destination.X, destination.Y,
 						(uint)size.Width, (uint)size.Height, 0, 0, 0,
-						(uint)size.Height, (IntPtr)ptr, ref lpbmi, DIB.RGB_COLORS) == 0);
+						(uint)size.Height, (IntPtr)ptr,
+						ref lpbmi, DIB.RGB_COLORS) == 0);
 				}
-			}
-		}
-
-		[StructLayout(LayoutKind.Sequential, Pack = 4)]
-		private struct ColorRef
-		{
-			public byte R, G, B;
-
-			public static implicit operator Color(ColorRef c)
-			{
-				return Color.FromArgb(c.R, c.G, c.B);
 			}
 		}
 
@@ -979,24 +976,24 @@ namespace Amity
 		);
 
 		[DllImport(Gdi)]
-		private static extern ColorRef SetDCPenColor(
+		private static extern uint SetDCPenColor(
 			IntPtr hdc,
-			ColorRef color
+			uint color
 		);
 
 		[DllImport(Gdi)]
-		private static extern ColorRef GetDCPenColor(
+		private static extern uint GetDCPenColor(
 			IntPtr hdc
 		);
 
 		[DllImport(Gdi)]
-		private static extern ColorRef SetDCBrushColor(
+		private static extern uint SetDCBrushColor(
 			IntPtr hdc,
-			ColorRef color
+			uint color
 		);
 
 		[DllImport(Gdi)]
-		private static extern ColorRef GetDCBrushColor(
+		private static extern uint GetDCBrushColor(
 			IntPtr hdc
 		);
 

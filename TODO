@@ -11,18 +11,18 @@ Win32:
 	✔ Window creation @done(18-09-28 17:35)
 	✔ Bitmap painting @done(18-09-28 17:35)
 	✔ Exit the Show loop @done(18-09-30 23:14)
-	☐ Resize events
+	✔ Resize events @done(18-10-13 22:49)
 	☐ Style options
 	☐ Layered windows
-	☐ Drawing contexts with GDI
-	☐ Mouse and button events
+	✔ Drawing contexts with GDI @done(18-10-13 22:49)
+	✔ Mouse and button events @done(18-10-13 22:49)
 
 XServer:
 	✔ Window creation @done(18-09-30 23:13)
-	☐ Sizing and resizing
-	☐ Drawing context
-	☐ Bitmap painting
-	☐ Mouse and button events
+	✔ Sizing and resizing @done(18-10-13 22:49)
+	✔ Drawing context @done(18-10-13 22:49)
+	✔ Bitmap painting @done(18-10-13 22:49)
+	✔ Mouse and button events @done(18-10-13 22:49)
 
 Quartz:
 	☐ Window creation

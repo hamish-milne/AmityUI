@@ -22,8 +22,7 @@ namespace Amity.X11
 	{
 	}
 
-	public interface X11Request<TWritable> : X11RequestBase
-		where TWritable : IWritable
+	public interface X11Request<TData> : X11RequestBase, X11RequestData<TData>
 	{
 	}
 
@@ -32,9 +31,13 @@ namespace Amity.X11
 	{
 	}
 
-	public interface X11RequestReply<TWritable, TReply> : X11RequestBase
-		where TWritable : IWritable
+	public interface X11RequestReply<TData, TReply> : X11RequestBase, X11RequestData<TData>
 		where TReply : struct, X11Reply
+	{
+	}
+
+	public interface X11RequestReplyWithData<TReply, TData> : X11RequestBase
+		where TReply : struct, X11Reply<TData>
 	{
 	}
 
@@ -42,10 +45,15 @@ namespace Amity.X11
 	{
 	}
 
-	public interface IWritable
+	public interface X11Reply<TData>
+	{
+		TData Read(Span<byte> data);
+	}
+
+	public interface X11RequestData<TData>
 	{
 		int MaxSize { get; }
-		int WriteTo(Span<byte> span);
+		int WriteTo(in TData data, Span<byte> output);
 	}
 
 	public class Transport : IDisposable
@@ -128,7 +136,7 @@ namespace Amity.X11
 			}
 		}
 
-		public T Read<T>() where T : struct
+		public T Read<T>() where T : unmanaged
 		{
 			var size = Marshal.SizeOf<T>();
 			Grow(ref _rBuffer, size, false);
@@ -144,7 +152,7 @@ namespace Amity.X11
 			return Encoding.UTF8.GetString(_rBuffer, 0, len);
 		}
 
-		private void Write<T>(in T obj) where T : struct
+		private void Write<T>(in T obj) where T : unmanaged
 		{
 			var size = Marshal.SizeOf<T>();
 			Grow(ref _wBuffer, size + _wBufferIdx, _wBufferIdx > 0);
@@ -153,10 +161,11 @@ namespace Amity.X11
 			_wBufferIdx += size;
 		}
 
-		private void Write(IWritable obj)
+		private void WriteIndirect<TWriter, TData>(in TWriter writer, TData data)
+			where TWriter : struct, X11RequestData<TData>
 		{
-			Grow(ref _wBuffer, obj.MaxSize + _wBufferIdx, _wBufferIdx > 0);
-			_wBufferIdx += obj.WriteTo(_wBuffer.AsSpan(_wBufferIdx));
+			Grow(ref _wBuffer, writer.MaxSize + _wBufferIdx, _wBufferIdx > 0);
+			_wBufferIdx += writer.WriteTo(data, _wBuffer.AsSpan(_wBufferIdx));
 		}
 
 		private void Send(bool hasRequestLength)
@@ -174,7 +183,7 @@ namespace Amity.X11
 			_wBufferIdx = 0;
 		}
 
-		public void Request<T>(in T data) where T : struct, X11Request
+		public void Request<T>(in T data) where T : unmanaged, X11Request
 		{
 			Write(data);
 			_wBuffer[0] = data.Opcode;
@@ -182,18 +191,17 @@ namespace Amity.X11
 		}
 		
 		public void Request<T, T1>(in T data, T1 extra)
-			where T : struct, X11Request<T1>
-			where T1 : IWritable
+			where T : unmanaged, X11Request<T1>
 		{
 			Write(data);
 			_wBuffer[0] = data.Opcode;
-			Write(extra);
+			WriteIndirect(data, extra);
 			Send(true);
 		}
 
 		public void Request<T, T1>(in T data, Span<T1> extra)
-			where T : struct, X11RequestWithData<T1>
-			where T1 : struct
+			where T : unmanaged, X11RequestWithData<T1>
+			where T1 : unmanaged
 		{
 			Write(data);
 			_wBuffer[0] = data.Opcode;
@@ -205,8 +213,8 @@ namespace Amity.X11
 		}
 
 		public void Request<T, TReply>(in T data, out TReply reply)
-			where T : struct, X11RequestReply<TReply>
-			where TReply : struct, X11Reply
+			where T : unmanaged, X11RequestReply<TReply>
+			where TReply : unmanaged, X11Reply
 		{
 			Write(data);
 			_wBuffer[0] = data.Opcode;
@@ -215,13 +223,12 @@ namespace Amity.X11
 		}
 		
 		public void Request<T, T1, TReply>(in T data, T1 extra, out TReply reply)
-			where T : struct, X11RequestReply<T1, TReply>
-			where TReply : struct, X11Reply
-			where T1 : IWritable
+			where T : unmanaged, X11RequestReply<T1, TReply>
+			where TReply : unmanaged, X11Reply
 		{
 			Write(data);
 			_wBuffer[0] = data.Opcode;
-			Write(extra);
+			WriteIndirect(data, extra);
 			Send(true);
 			reply = ReadReply<TReply>();
 		}
@@ -264,7 +271,7 @@ namespace Amity.X11
 			return false;
 		}
 
-		public T ReadReply<T>() where T : struct, X11Reply
+		public T ReadReply<T>() where T : unmanaged, X11Reply
 		{
 			while (true)
 			{
@@ -286,10 +293,10 @@ namespace Amity.X11
 			public abstract void Read(Span<byte> data);
 		}
 
-		private class Event<T> : EventBase where T : struct, X11Event
+		private class Event<T> : EventBase where T : unmanaged, X11Event
 		{
 			// NB: This only works because X11 has <64 events (34, at time of writing)
-			private static ulong _opcodes = default(T).Opcodes
+			private static readonly ulong _opcodes = default(T).Opcodes
 				.Aggregate((ulong)0, (u, b) => u | (ulong)(1 << b));
 			public override bool HasOpcode(byte b) => (_opcodes & (ulong)(1 << b)) != 0;
 
@@ -301,7 +308,7 @@ namespace Amity.X11
 			}
 		}
 
-		public void ListenTo<T>(Action<T> action) where T : struct, X11Event
+		public void ListenTo<T>(Action<T> action) where T : unmanaged, X11Event
 		{
 			var e = _events.OfType<Event<T>>().SingleOrDefault();
 			if (e == null)

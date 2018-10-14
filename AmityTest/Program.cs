@@ -9,6 +9,7 @@ using SixLabors.Fonts;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using Pixel = SixLabors.ImageSharp.PixelFormats.Bgr32;
 
 namespace Amity
 {
@@ -19,23 +20,33 @@ namespace Amity
             X11Window.EndPoint = new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 6000);
             Console.WriteLine("Hello World!");
             var window = new X11Window();
-            window.Draw += () =>
+
+            Pixel[] memory = null;
+            Image<Pixel> image = null;
+
+
+            window.Resize += () =>
             {
                 var client = window.ClientArea;
                 if (client.Width * client.Height == 0) { return; }
-                var memory = new Bgra32[client.Width * client.Height];
-                using (var image = Image.WrapMemory<Bgra32>(memory, client.Width, client.Height))
-                {
-                    image.Mutate(a => a.DrawText("ImageSharp",
-                        new Font(SystemFonts.Families.First(), 24f, FontStyle.Regular),
-                        NamedColors<Bgra32>.Red,
-                        new PointF(0, 0)));
-                }
+                memory = new Pixel[client.Width * client.Height];
+                image = Image.WrapMemory<Pixel>(memory, client.Width, client.Height);
+            };
+            
+            window.Draw += () =>
+            {
+                image.Mutate(a => a.DrawText("ImageSharp",
+                new Font(SystemFonts.Families.First(f => f.Name == "Calibri"),
+                    24, FontStyle.Regular),
+                NamedColors<Pixel>.Red,
+                new PointF(0, 0)));
+
+                var client = window.ClientArea;
                 using (var dc = window.GetDrawingContext())
                 {
-                    //MemoryMarshal.Cast<Bgra32, Color32>(memory.AsSpan()).AlphaPremultiply();
-                    dc.Image(MemoryMarshal.Cast<Bgra32, Color32>(memory.AsSpan()),
+                    dc.Image(MemoryMarshal.Cast<Pixel, Color32>(memory.AsSpan()),
                         client.Size, new Point(0, 0));
+                    dc.Pen = Color.Magenta;
                     dc.Line(new Point(0, 0), new Point(200, 300));
                 }
                 //MemoryMarshal.Cast<Rgba32, Color32>(memory.AsSpan()).CopyTo(window.Buffer);
@@ -95,7 +106,7 @@ namespace Amity
                 //window.Buffer[pos.X + pos.Y*window.ClientArea.Width] = Color.Green;
                 //window.Invalidate();
             };
-            window.Show(new Rectangle(0, 0, 200, 100));
+            window.Show(new Rectangle(0, 0, 800, 400));
         }
     }
 }
