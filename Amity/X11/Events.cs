@@ -29,6 +29,22 @@ namespace Amity.X11
 		byte[] Opcodes { get; }
 	}
 
+	[StructLayout(LayoutKind.Sequential, Size = 32)]
+	public struct X11AbstractEvent
+	{
+	}
+
+	public static partial class Util
+	{
+		public static X11AbstractEvent ToAbstractEvent<T>(T obj)
+			where T : unmanaged, X11Event
+		{
+			Span<byte> data = stackalloc byte[32];
+			MemoryMarshal.Write(data, ref obj);
+			return MemoryMarshal.Read<X11AbstractEvent>(data);
+		}
+	}
+
 	[StructLayout(LayoutKind.Sequential, Pack = 1)]
 	public struct Error : X11Event
 	{

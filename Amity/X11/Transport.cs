@@ -17,27 +17,22 @@ namespace Amity.X11
 	{
 	}
 
-	public interface X11RequestWithData<T> : X11RequestBase
-		where T : struct
+	public interface X11SpanRequest<TSpan> : X11RequestBase
+		where TSpan : unmanaged
 	{
 	}
 
-	public interface X11Request<TData> : X11RequestBase, X11RequestData<TData>
+	public interface X11DataRequest<TData> : X11RequestBase, X11RequestData<TData>
 	{
 	}
 
 	public interface X11RequestReply<TReply> : X11RequestBase
-		where TReply : struct, X11Reply
+		where TReply : struct
 	{
 	}
 
-	public interface X11RequestReply<TData, TReply> : X11RequestBase, X11RequestData<TData>
-		where TReply : struct, X11Reply
-	{
-	}
-
-	public interface X11RequestReplyWithData<TReply, TData> : X11RequestBase
-		where TReply : struct, X11Reply<TData>
+	public interface X11DataRequestReply<TData, TReply> : X11RequestBase, X11RequestData<TData>
+		where TReply : struct
 	{
 	}
 
@@ -47,13 +42,14 @@ namespace Amity.X11
 
 	public interface X11Reply<TData>
 	{
+		int ExpectedLength { get; }
 		TData Read(Span<byte> data);
 	}
 
 	public interface X11RequestData<TData>
 	{
 		int MaxSize { get; }
-		int WriteTo(in TData data, Span<byte> output);
+		int WriteTo(in TData data, Span<byte> output, Span<byte> rData);
 	}
 
 	public class Transport : IDisposable
@@ -165,17 +161,14 @@ namespace Amity.X11
 			where TWriter : struct, X11RequestData<TData>
 		{
 			Grow(ref _wBuffer, writer.MaxSize + _wBufferIdx, _wBufferIdx > 0);
-			_wBufferIdx += writer.WriteTo(data, _wBuffer.AsSpan(_wBufferIdx));
+			_wBufferIdx += writer.WriteTo(data, _wBuffer.AsSpan(_wBufferIdx), _wBuffer);
 		}
 
 		private void Send(bool hasRequestLength)
 		{
 			if (hasRequestLength)
 			{
-				if ((_wBufferIdx % 4) != 0)
-				{
-					throw new Exception("Malformed request: length not a multiple of 4");
-				}
+				_wBufferIdx += Pad(_wBufferIdx);
 				MemoryMarshal.Cast<byte, ushort>(_wBuffer.AsSpan())
 					[1] = (ushort)(_wBufferIdx / 4);
 			}
@@ -190,8 +183,8 @@ namespace Amity.X11
 			Send(true);
 		}
 		
-		public void Request<T, T1>(in T data, T1 extra)
-			where T : unmanaged, X11Request<T1>
+		public void Request<T, TData>(in T data, TData extra)
+			where T : unmanaged, X11DataRequest<TData>
 		{
 			Write(data);
 			_wBuffer[0] = data.Opcode;
@@ -199,16 +192,16 @@ namespace Amity.X11
 			Send(true);
 		}
 
-		public void Request<T, T1>(in T data, Span<T1> extra)
-			where T : unmanaged, X11RequestWithData<T1>
-			where T1 : unmanaged
+		public void Request<T, TSpan>(in T data, Span<TSpan> extra)
+			where T : unmanaged, X11SpanRequest<TSpan>
+			where TSpan : unmanaged
 		{
 			Write(data);
 			_wBuffer[0] = data.Opcode;
 			var startIdx = _wBufferIdx;
-			_wBufferIdx += extra.Length * Marshal.SizeOf<T1>();
+			_wBufferIdx += extra.Length * Marshal.SizeOf<TSpan>();
 			Grow(ref _wBuffer, _wBufferIdx, _wBufferIdx > 0);
-			MemoryMarshal.Cast<T1, byte>(extra).CopyTo(_wBuffer.AsSpan(startIdx));
+			MemoryMarshal.Cast<TSpan, byte>(extra).CopyTo(_wBuffer.AsSpan(startIdx));
 			Send(true);
 		}
 
@@ -221,9 +214,19 @@ namespace Amity.X11
 			Send(true);
 			reply = ReadReply<TReply>();
 		}
+
+		public void Request<T, TReply, TReplyData>(in T data, out (TReply, TReplyData) reply)
+			where T : unmanaged, X11RequestReply<TReply>
+			where TReply : unmanaged, X11Reply<TReplyData>
+		{
+			Write(data);
+			_wBuffer[0] = data.Opcode;
+			Send(true);
+			reply = ReadReply<TReply, TReplyData>();
+		}
 		
-		public void Request<T, T1, TReply>(in T data, T1 extra, out TReply reply)
-			where T : unmanaged, X11RequestReply<T1, TReply>
+		public void Request<T, TData, TReply>(in T data, TData extra, out TReply reply)
+			where T : unmanaged, X11DataRequestReply<TData, TReply>
 			where TReply : unmanaged, X11Reply
 		{
 			Write(data);
@@ -271,7 +274,7 @@ namespace Amity.X11
 			return false;
 		}
 
-		public T ReadReply<T>() where T : unmanaged, X11Reply
+		private T ReadReply<T>() where T : unmanaged
 		{
 			while (true)
 			{
@@ -283,6 +286,15 @@ namespace Amity.X11
 					HandleEvent();
 				}
 			}
+		}
+
+		private (T, TData) ReadReply<T, TData>()
+			where T : unmanaged, X11Reply<TData>
+		{
+			var reply = ReadReply<T>();
+			Grow(ref _rBuffer, reply.ExpectedLength, false);
+			var data = reply.Read(_rBuffer);
+			return (reply, data);
 		}
 
 		private readonly List<EventBase> _events = new List<EventBase>();

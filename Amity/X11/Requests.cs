@@ -4,6 +4,7 @@ namespace Amity.X11
 	using System.Runtime.InteropServices;
 	using System.Drawing;
 	using System.Text;
+	using static System.Runtime.InteropServices.UnmanagedType;
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct Rect
@@ -182,7 +183,7 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct CreateWindow : X11Request<WindowValues>
+	public struct CreateWindow : X11DataRequest<WindowValues>
 	{
 		public byte Opcode => 1;
 		private byte _opcode;
@@ -196,7 +197,7 @@ namespace Amity.X11
 		public uint Visual;
 
 		public int MaxSize => ValuesMask.MaxSize<WindowValues>();
-		public int WriteTo(in WindowValues data, Span<byte> output) =>
+		public int WriteTo(in WindowValues data, Span<byte> output, Span<byte> rData) =>
 			ValuesMask.WriteTo(data, output);
 	}
 
@@ -300,45 +301,45 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct ChangeWindowAttributes : X11Request<WindowValues>
+	public struct ChangeWindowAttributes : X11DataRequest<WindowValues>
 	{
 		public byte Opcode => 2;
 		public uint Window;
 
 		public int MaxSize => ValuesMask.MaxSize<WindowValues>();
-		public int WriteTo(in WindowValues data, Span<byte> output) =>
+		public int WriteTo(in WindowValues data, Span<byte> output, Span<byte> rData) =>
 			ValuesMask.WriteTo(data, output);
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct GetWindowAttributes : X11RequestReply<GetWindowAttributesReply>
+	public struct GetWindowAttributes : X11RequestReply<GetWindowAttributes.Reply>
 	{
 		public byte Opcode => 3;
 		private uint _unused;
 		public uint Window;
-	}
 
-	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct GetWindowAttributesReply : X11Reply
-	{
-		private byte _opcode;
-		public BackingStoreType BackingStore;
-		public ushort SequenceNumber;
-		private uint _replyLength;
-		public uint VisualID;
-		public WindowClass Class;
-		public byte BitGravity;
-		public byte WinGravity;
-		public uint BackingPlanes;
-		public uint BackingPixel;
-		[MarshalAs(UnmanagedType.U1)] public bool SaveUnder;
-		[MarshalAs(UnmanagedType.U1)] public bool MapIsInstalled;
-		public Visibility MapState;
-		[MarshalAs(UnmanagedType.U1)] public bool OverrideRedirect;
-		public uint Colormap;
-		public Event AllEvents;
-		public Event YourEvents;
-		public Event DoNotPropagateMask;
+		[StructLayout(LayoutKind.Sequential, Pack = 2)]
+		public struct Reply : X11Reply
+		{
+			private byte _opcode;
+			public BackingStoreType BackingStore;
+			public ushort SequenceNumber;
+			private uint _replyLength;
+			public uint VisualID;
+			public WindowClass Class;
+			public byte BitGravity;
+			public byte WinGravity;
+			public uint BackingPlanes;
+			public uint BackingPixel;
+			[MarshalAs(U1)] public bool SaveUnder;
+			[MarshalAs(U1)] public bool MapIsInstalled;
+			public Visibility MapState;
+			[MarshalAs(U1)] public bool OverrideRedirect;
+			public uint Colormap;
+			public Event AllEvents;
+			public Event YourEvents;
+			public Event DoNotPropagateMask;
+		}
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -438,14 +439,14 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct ConfigureWindow : X11Request<ConfigurationValues>
+	public struct ConfigureWindow : X11DataRequest<ConfigurationValues>
 	{
 		public byte Opcode => 12;
 		private uint _unused;
 		public uint Window;
 
 		public int MaxSize => ValuesMask.MaxSize<ConfigurationValues>();
-		public int WriteTo(in ConfigurationValues data, Span<byte> output) =>
+		public int WriteTo(in ConfigurationValues data, Span<byte> output, Span<byte> rData) =>
 			ValuesMask.WriteTo(data, output);
 	}
 
@@ -481,7 +482,7 @@ namespace Amity.X11
 		public uint Window;
 	}
 
-	public static class Util
+	public static partial class Util
 	{
 		public static unsafe int WriteOut(
 			this string str, Span<byte> output)
@@ -496,15 +497,15 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct InternAtom : X11Request<string>
+	public struct InternAtom : X11DataRequest<string>
 	{
 		public byte Opcode => 16;
 		private byte _opcode;
-		[MarshalAs(UnmanagedType.U1)] public bool OnlyIfExists;
+		[MarshalAs(U1)] public bool OnlyIfExists;
 		private ushort _requestLength;
 
 		public int MaxSize => 65535; // TODO: String length
-		public unsafe int WriteTo(in string data, Span<byte> output)
+		public unsafe int WriteTo(in string data, Span<byte> output, Span<byte> rData)
 		{
 			var str = data ?? string.Empty;
 			var byteCount = data.WriteOut(output.Slice(4));
@@ -514,24 +515,25 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct GetAtomName : X11RequestReplyWithData<GetAtomNameReply, string>
+	public struct GetAtomName : X11RequestReply<GetAtomName.Reply>
 	{
 		public byte Opcode => 17;
 		private uint _unused;
 		public uint Atom;
-	}
 
-	[StructLayout(LayoutKind.Sequential, Pack = 2, Size = 32)]
-	public struct GetAtomNameReply : X11Reply<string>
-	{
-		private uint _unused;
-		private uint _replyLength;
-		private ushort _nameLength;
-
-		public unsafe string Read(Span<byte> data)
+		[StructLayout(LayoutKind.Sequential, Pack = 2, Size = 32)]
+		public struct Reply : X11Reply<string>
 		{
-			fixed (byte* src = data)
-				return System.Text.Encoding.UTF8.GetString(src, data.Length);
+			private uint _unused;
+			private uint _replyLength;
+			private ushort _nameLength;
+
+			public int ExpectedLength => _nameLength;
+			public unsafe string Read(Span<byte> data)
+			{
+				fixed (byte* src = data)
+					return Encoding.UTF8.GetString(src, _nameLength);
+			}
 		}
 	}
 
@@ -543,7 +545,7 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct ChangeProperty : X11Request<Memory<byte>>
+	public struct ChangeProperty : X11DataRequest<Memory<byte>>
 	{
 		public byte Opcode => 18;
 		private byte _opcode;
@@ -556,7 +558,7 @@ namespace Amity.X11
 		private ushort _unused;
 		
 		public int MaxSize => 65535;
-		public int WriteTo(in Memory<byte> data, Span<byte> output)
+		public int WriteTo(in Memory<byte> data, Span<byte> output, Span<byte> rData)
 		{
 			switch (Format)
 			{
@@ -573,6 +575,179 @@ namespace Amity.X11
 			data.Span.CopyTo(output.Slice(4));
 			return data.Length + 4;
 		}
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct DeleteProperty : X11Request
+	{
+		public byte Opcode => 19;
+		private uint _unused;
+		public uint Window;
+		public uint Property;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct GetProperty : X11RequestReply<GetProperty.Reply>
+	{
+		public byte Opcode => 20;
+		private byte _opcode;
+		[MarshalAs(U1)] public bool Delete;
+		private ushort _requestLength;
+		public uint Window;
+		public uint Property;
+		public uint Type;
+		public uint Offset;
+		public uint Length;
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2, Size = 32)]
+		public struct Reply : X11Reply<byte[]>
+		{
+			private byte _unused;
+			public byte Format;
+			public ushort SequenceNumber;
+			private uint _replyLength;
+			public uint Type;
+			private uint _bytesAfter;
+			private uint _valueLength;
+
+			public int ExpectedLength => (int)_valueLength * (Format / 8);
+			public byte[] Read(Span<byte> data)
+			{
+				var ret = new byte[ExpectedLength];
+				data.Slice(0, ret.Length).CopyTo(ret);
+				return ret;
+			}
+		}
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct ListProperties : X11RequestReply<ListProperties.Reply>
+	{
+		public byte Opcode => 21;
+		private uint _unused;
+		public uint Window;
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2, Size = 32)]
+		public struct Reply : X11Reply<uint[]>
+		{
+			private ushort _unused;
+			public ushort SequenceNumber;
+			private uint _replyLength;
+			private ushort _atomsCount;
+
+			public int ExpectedLength => _atomsCount * sizeof(uint);
+			public uint[] Read(Span<byte> data)
+			{
+				var ret = new uint[_atomsCount];
+				data.Slice(0, ExpectedLength)
+					.CopyTo(MemoryMarshal.AsBytes(ret.AsSpan()));
+				return ret;
+			}
+		}
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct SetSelectionOwner : X11Request
+	{
+		public byte Opcode => 22;
+		private uint _unused;
+		public uint Owner;
+		public uint Selection;
+		public uint Time;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct GetSelectionOwner : X11RequestReply<GetSelectionOwner.Reply>
+	{
+		public byte Opcode => 23;
+		private uint _unused;
+		public uint Selection;
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2, Size = 32)]
+		public struct Reply : X11Reply
+		{
+			private ushort _unused;
+			public ushort SequenceNumber;
+			private uint _replyLength;
+			public uint Window;
+		}
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct ConvertSelection : X11Request
+	{
+		public byte Opcode => 24;
+		private uint _unused;
+		public uint Requestor;
+		public uint Selection;
+		public uint Target;
+		public uint Property;
+		public uint Time;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct SendEvent : X11Request
+	{
+		public byte Opcode => 25;
+		private byte _opcode;
+		[MarshalAs(U1)] public bool Propagate;
+		private ushort _requestLength;
+		public uint Destination;
+		public Event EventMask;
+		public X11AbstractEvent EventData;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct GrabPointer : X11RequestReply<GrabPointer.Reply>
+	{
+		public byte Opcode => 26;
+		private byte _opcode;
+		[MarshalAs(U1)] public bool OwnerEvents;
+		private ushort _requestLength;
+		public uint GrabWindow;
+		public ushort EventMask;
+		[MarshalAs(U1)] public bool PointerAsync;
+		[MarshalAs(U1)] public bool KeyboardAsync;
+		public uint ConfineTo;
+		public uint Cursor;
+		public uint Time;
+
+		public enum Status : byte
+		{
+			Success,
+			AlreadyGrabbed,
+			InvalidTime,
+			NotViewable,
+			Frozen
+		}
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2)]
+		public struct Reply : X11Reply
+		{
+			private byte _unused;
+			public Status Status;
+			public ushort SequenceNumber;
+		}
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct UngrabPointer : X11Request
+	{
+		public byte Opcode => 27;
+		private uint _unused;
+		public uint Time;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Size = 4)]
+	public struct GrabServer : X11Request
+	{
+		public byte Opcode => 36;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Size = 4)]
+	public struct UngrabServer : X11Request
+	{
+		public byte Opcode => 37;
 	}
 
 	public enum GCFunction : byte
@@ -672,7 +847,7 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct CreateGC : X11Request<GCValues>
+	public struct CreateGC : X11DataRequest<GCValues>
 	{
 		public byte Opcode => 55;
 		private uint _unused;
@@ -680,7 +855,7 @@ namespace Amity.X11
 		public uint Drawable;
 
 		public int MaxSize => ValuesMask.MaxSize<GCValues>();
-		public int WriteTo(in GCValues data, Span<byte> output) =>
+		public int WriteTo(in GCValues data, Span<byte> output, Span<byte> rData) =>
 			ValuesMask.WriteTo(data, output);
 	}
 
@@ -689,10 +864,23 @@ namespace Amity.X11
 	{
 		public byte Opcode => 61;
 		private byte _opcode;
-		[MarshalAs(UnmanagedType.U1)] public bool Exposures;
+		[MarshalAs(U1)] public bool Exposures;
 		private ushort _requestLength;
 		public uint Window;
 		public Rect Rect;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct CopyArea : X11Request
+	{
+		public byte Opcode => 62;
+		private uint _unused;
+		public uint SrcDrawable;
+		public uint DstDrawable;
+		public uint GContext;
+		public short SrcX;
+		public short SrcY;
+		public Rect Dst;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -709,7 +897,35 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct PolyLine : X11RequestWithData<Point>
+	public struct PolyPoint : X11SpanRequest<Point>
+	{
+		public byte Opcode => 64;
+		private byte _opcode;
+		public CoordinateMode CoordinateMode;
+		private ushort _requestLength;
+		public uint Drawable;
+		public uint GContext;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct PolyLine : X11SpanRequest<Point>
+	{
+		public byte Opcode => 65;
+		private byte _opcode;
+		public CoordinateMode CoordinateMode;
+		private ushort _requestLength;
+		public uint Drawable;
+		public uint GContext;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct Segment
+	{
+		public Point A, B;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct PolySegment : X11SpanRequest<Segment>
 	{
 		public byte Opcode => 66;
 		private byte _opcode;
@@ -719,6 +935,65 @@ namespace Amity.X11
 		public uint GContext;
 	}
 
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct PolyRectangle : X11SpanRequest<Rect>
+	{
+		public byte Opcode => 67;
+		private byte _opcode;
+		public CoordinateMode CoordinateMode;
+		private ushort _requestLength;
+		public uint Drawable;
+		public uint GContext;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct ImageText8 : X11DataRequest<string>
+	{
+		public byte Opcode => 76;
+		private uint _unused;
+		public uint Drawable;
+		public uint GContext;
+		public short X;
+		public short Y;
+
+		public int MaxSize => 65535;
+		public int WriteTo(in string data, Span<byte> output, Span<byte> rData)
+		{
+			var count = data.WriteOut(output);
+			if (count > byte.MaxValue)
+			{
+				throw new Exception("String is too long!");
+			}
+			rData[1] = (byte)count;
+			return count;
+		}
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct ImageText16 : X11DataRequest<string>
+	{
+		public byte Opcode => 77;
+		private uint _unused;
+		public uint Drawable;
+		public uint GContext;
+		public short X;
+		public short Y;
+
+		public int MaxSize => 65535;
+		public int WriteTo(in string data, Span<byte> output, Span<byte> rData)
+		{
+			var src = MemoryMarshal.Cast<char, byte>(data.AsSpan());
+			src.CopyTo(output);
+			var count = data.Length;
+			if (count > byte.MaxValue)
+			{
+				throw new Exception("String is too long!");
+			}
+			rData[1] = (byte)count;
+			return src.Length;
+		}
+	}
+
 	public enum ImageFormat : byte
 	{
 		Bitmap,
@@ -726,9 +1001,8 @@ namespace Amity.X11
 		ZPixmap
 	}
 
-
 	[StructLayout(LayoutKind.Sequential, Pack = 4)]
-	public struct PutImage : X11RequestWithData<Color32>
+	public struct PutImage : X11SpanRequest<Color32>
 	{
 		public byte Opcode => 72;
 		private byte _opcode;
@@ -748,11 +1022,20 @@ namespace Amity.X11
 	public struct GetImage : X11Request
 	{
 		public byte Opcode => 73;
-		public byte _opcode;
+		private byte _opcode;
 		public ImageFormat Format;
 		public ushort _requestLength;
 		public uint Drawable;
 		public Rect Rect;
 		public uint PlaneMask;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct Bell : X11Request
+	{
+		public byte Opcode => 104;
+		private byte _opcode;
+		public sbyte Percent;
+		private ushort _requestLength;
 	}
 }

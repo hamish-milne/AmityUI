@@ -152,7 +152,7 @@ namespace Amity
 			},
 			new X11.GCValues
 			{
-				Foreground = (Color32)Color.Magenta,
+				Foreground = (Color32)Color.Magenta, // TODO: Use Brush and Pen for this
 			});
 			CreateBuffer((ushort)rect.Width, (ushort)rect.Height);
 			c.MessageLoop();
@@ -281,7 +281,15 @@ namespace Amity
 
 			public void Text(Point position, string font, string text)
 			{
-				throw new NotImplementedException();
+				var c = _parent.Connect();
+				c.Request(new ImageText8
+				{
+					Drawable = _parent._wId,
+					GContext = _parent._gc,
+					X = (short)position.X,
+					Y = (short)position.Y,
+				},
+				text);
 			}
 		}
 	}

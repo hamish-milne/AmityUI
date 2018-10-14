@@ -48,6 +48,7 @@ namespace Amity
                         client.Size, new Point(0, 0));
                     dc.Pen = Color.Magenta;
                     dc.Line(new Point(0, 0), new Point(200, 300));
+                    dc.Text(new Point(0, 50), null, "Built-in text");
                 }
                 //MemoryMarshal.Cast<Rgba32, Color32>(memory.AsSpan()).CopyTo(window.Buffer);
 
