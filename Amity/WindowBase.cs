@@ -48,8 +48,11 @@ namespace Amity
 
 		public Point MousePosition => _api.MousePosition;
 
-		public IDrawingContext GetDrawingContext()
-			=> _api.GetDrawingContext();
+		public IDrawingContext CreateDrawingContext()
+			=> _api.CreateDrawingContext();
+
+		public IDrawingContext CreateBitmap(Size size)
+			=> _api.CreateBitmap(size);
 		
 		public void Invalidate() => _api.Invalidate();
 	}

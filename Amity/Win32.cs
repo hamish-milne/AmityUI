@@ -123,7 +123,9 @@ namespace Amity
 					Resize?.Invoke();
 					break;
 				case WM.PAINT:
+					BeginPaint(_hwnd, out var paint);
 					Draw?.Invoke();
+					EndPaint(_hwnd, ref paint);
 					break;
 				case WM.MOUSEMOVE:
 					var xPos = (short)(ushort)(uint)lParam.ToInt32();
@@ -201,22 +203,35 @@ namespace Amity
 			}
 		}
 
-		public IDrawingContext GetDrawingContext()
+		public IDrawingContext CreateDrawingContext()
 		{
-			return new DrawingContext(this);
+			return new DrawingContext(_hwnd);
+		}
+
+		public IDrawingContext CreateBitmap(Size size)
+		{
+			throw new NotImplementedException();
 		}
 
 		private class DrawingContext : IDrawingContext
 		{
-			private IntPtr _hwnd;
 			private IntPtr _hdc;
+			private IntPtr _bitmap;
 			private PAINTSTRUCT _paint;
 
-			public DrawingContext(Win32 parent)
+			public DrawingContext(IntPtr hwnd)
 			{
-				_hwnd = parent._hwnd;
-				_hdc = parent._dstDc;
-				BeginPaint(_hwnd, out _paint);
+				_hdc = GetDC(hwnd);
+				SelectObject(_hdc, GetStockObject(StockObjects.DC_PEN));
+				SelectObject(_hdc, GetStockObject(StockObjects.DC_BRUSH));
+			}
+
+			public DrawingContext(IntPtr hwnd, Size size)
+			{
+				var tmpDc = GetDC(hwnd);
+				_hdc = CreateCompatibleDC(tmpDc);
+				_bitmap = CreateCompatibleBitmap(tmpDc, size.Width, size.Height);
+				ReleaseDC(tmpDc);
 				SelectObject(_hdc, GetStockObject(StockObjects.DC_PEN));
 				SelectObject(_hdc, GetStockObject(StockObjects.DC_BRUSH));
 			}
@@ -271,30 +286,28 @@ namespace Amity
 				throw new NotImplementedException();
 			}
 
-			public void BeginPolygon()
+			public void Polygon(ReadOnlySpan<Point> points)
 			{
 				throw new NotImplementedException();
 			}
 
 			public void Dispose()
 			{
-				EndPaint(_hwnd, ref _paint);
+				ReleaseDC(_hdc);
+				_hdc = IntPtr.Zero;
+				ReleaseDC(_bitmap);
+				_bitmap = IntPtr.Zero;
 			}
 
-			public void EndPolygon(bool forceClose)
+			~DrawingContext()
 			{
-				throw new NotImplementedException();
+				Dispose();
 			}
 
 			public void Line(Point a, Point b)
 			{
 				ThrowError(MoveToEx(_hdc, a.X, a.Y, out var _) == 0);
 				ThrowError(LineTo(_hdc, b.X, b.Y) == 0);
-			}
-
-			public void PushPoint(Point next)
-			{
-				throw new NotImplementedException();
 			}
 
 			public void Rectangle(Rectangle rect)
@@ -333,6 +346,13 @@ namespace Amity
 						(uint)size.Height, (IntPtr)ptr,
 						ref lpbmi, DIB.RGB_COLORS) == 0);
 				}
+			}
+
+			public void CopyTo(Rectangle srcRect, Point dstPos, IDrawingContext dst)
+			{
+				var dstC = (DrawingContext)dst;
+				BitBlt(dstC._hdc, dstPos.X, dstPos.Y,
+					srcRect.Width, srcRect.Height, _hdc, srcRect.X, srcRect.Y, RasterOp.SRCCOPY);
 			}
 		}
 
@@ -845,6 +865,13 @@ namespace Amity
 			IntPtr hdc
 		);
 
+		[DllImport(Gdi)]
+		private static extern IntPtr CreateCompatibleBitmap(
+			IntPtr hdc,
+			int cx,
+			int cy
+		);
+
 		enum DIB : uint
 		{
 			RGB_COLORS = 0x00,
@@ -973,6 +1000,11 @@ namespace Amity
 		[DllImport(Gdi)]
 		private static extern int DeleteObject(
 			IntPtr ho
+		);
+
+		[DllImport(Gdi)]
+		private static extern int ReleaseDC(
+			IntPtr hdc
 		);
 
 		[DllImport(Gdi)]

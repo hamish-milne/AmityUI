@@ -48,7 +48,7 @@ namespace Amity.X11
 
 	public interface X11RequestData<TData>
 	{
-		int MaxSize { get; }
+		int GetMaxSize(in TData data);
 		int WriteTo(in TData data, Span<byte> output, Span<byte> rData);
 	}
 
@@ -157,10 +157,10 @@ namespace Amity.X11
 			_wBufferIdx += size;
 		}
 
-		private void WriteIndirect<TWriter, TData>(in TWriter writer, TData data)
+		private void WriteIndirect<TWriter, TData>(in TWriter writer, in TData data)
 			where TWriter : struct, X11RequestData<TData>
 		{
-			Grow(ref _wBuffer, writer.MaxSize + _wBufferIdx, _wBufferIdx > 0);
+			Grow(ref _wBuffer, writer.GetMaxSize(data) + _wBufferIdx, _wBufferIdx > 0);
 			_wBufferIdx += writer.WriteTo(data, _wBuffer.AsSpan(_wBufferIdx), _wBuffer);
 		}
 
@@ -267,10 +267,18 @@ namespace Amity.X11
 			var span = _msgBuffer.AsSpan();
 			while (_loop)
 			{
-				while (_socket.Available < _msgBuffer.Length) ;
-				_socket.Receive(_msgBuffer);
-				HandleEvent();
+				do {
+					_socket.Receive(_msgBuffer);
+					HandleEvent();
+				} while (_socket.Available >= _msgBuffer.Length);
+				CommitEvents();
 			}
+		}
+
+		private void CommitEvents()
+		{
+			foreach (var e in _events)
+				e.Commit();
 		}
 
 		private bool HandleEvent()
@@ -293,6 +301,7 @@ namespace Amity.X11
 				_socket.Receive(_msgBuffer);
 				if (_msgBuffer[0] == 1)
 				{
+					CommitEvents();
 					return MemoryMarshal.Read<T>(_msgBuffer.AsSpan());
 				} else {
 					HandleEvent();
@@ -317,6 +326,7 @@ namespace Amity.X11
 		{
 			public abstract bool HasOpcode(byte opcode);
 			public abstract void Read(Span<byte> data);
+			public abstract void Commit();
 		}
 
 		private class Event<T> : EventBase where T : unmanaged, X11Event
@@ -328,9 +338,22 @@ namespace Amity.X11
 
 			public Action<T> OnEvent;
 
+			// TODO: Allow some events to be 'immediate'?
+
+			private T? _eventData;
+
 			public override void Read(Span<byte> data)
 			{
-				OnEvent?.Invoke(MemoryMarshal.Read<T>(data));
+				_eventData = MemoryMarshal.Read<T>(data);
+			}
+
+			public override void Commit()
+			{
+				if (_eventData.HasValue)
+				{
+					OnEvent?.Invoke(_eventData.Value);
+					_eventData = null;
+				}
 			}
 		}
 
@@ -342,6 +365,34 @@ namespace Amity.X11
 				_events.Add(e = new Event<T>());
 			}
 			e.OnEvent += action;
+		}
+
+		private readonly HashSet<uint> _ids = new HashSet<uint>();
+
+		private uint _currentID;
+
+		public uint ClaimID()
+		{
+			bool hasLooped = false;
+			do {
+				_currentID++;
+				// TODO: Add a case for non-contiguous ResourceIdMask?
+				if (_currentID >= Info.ResourceIdMask)
+				{
+					_currentID = 0;
+					if (hasLooped)
+					{
+						throw new Exception("Out of IDs!");
+					}
+					hasLooped = true;
+				}
+			} while (!_ids.Add(_currentID));
+			return _currentID + Info.ResourceIdBase;
+		}
+
+		public void ReleaseID(uint id)
+		{
+			_ids.Remove(id);
 		}
 	}
 }

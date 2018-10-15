@@ -7,7 +7,6 @@ namespace Amity
 	using System.Drawing;
 	using X11;
 	using Point = System.Drawing.Point;
-	using System.Collections.Generic;
 
 	// From https://www.x.org/docs/XProtocol/proto.pdf
 
@@ -20,11 +19,12 @@ namespace Amity
 
 		public static bool GetServer(out EndPoint endpoint, out int screen)
 		{
-			var match = _serverPattern.Match(Environment.GetEnvironmentVariable("DISPLAY"));
+			var match = _serverPattern.Match(
+				Environment.GetEnvironmentVariable("DISPLAY") ?? "");
 			if (!match.Success)
 			{
 				screen = 0;
-				endpoint = null;
+				endpoint = new IPEndPoint(IPAddress.Loopback, 6000);
 				return false;
 			}
 			var host = match.Groups[1].Value;
@@ -73,7 +73,7 @@ namespace Amity
 				_connection.ListenTo<X11.ConfigureNotify>(HandleResize);
 				_connection.ListenTo<X11.Expose>(HandleExpose);
 				_connection.ListenTo<X11.MotionNotify>(HandleMouseMove);
-				_currentID = _connection.Info.ResourceIdBase;
+				_connection.ListenTo<X11.Error>(e => throw new Exception(e.ToString()));
 				_screen = _connection.Screens[0].Item1;
 			}
 			return _connection;
@@ -109,14 +109,13 @@ namespace Amity
 			MouseMove?.Invoke(new Point(e.Data.EventX, e.Data.EventY));
 		}
 
-		private static uint _currentID;
 		private static X11.Screen _screen;
 
 		public void Show(Rectangle rect)
 		{
 			var c = Connect();
 
-			_wId = ++_currentID;
+			_wId = c.ClaimID();
 			c.Request(new X11.CreateWindow
 			{
 				Rect = (X11.Rect)rect,
@@ -134,7 +133,7 @@ namespace Amity
 					| X11.Event.ResizeRedirect
 					| X11.Event.StructureNotify
 					| X11.Event.Exposure,
-				BackgroundPixel = 0x00FFFFFF,
+				BackgroundPixel = 0xFFFFFFFF,
 			});
 			c.Request(new X11.MapWindow
 			{
@@ -145,21 +144,11 @@ namespace Amity
 				Window = _wId,
 				Rect = (X11.Rect)rect,
 			});
-			_gc = ++_currentID;
-			c.Request(new X11.CreateGC
-			{
-				ContextID = _gc,
-				Drawable = _wId,
-			},
-			new X11.GCValues
-			{
-				Foreground = (Color32)Color.Magenta, // TODO: Use Brush and Pen for this
-			});
 			CreateBuffer((ushort)rect.Width, (ushort)rect.Height);
 			c.MessageLoop();
 		}
 
-		private uint _wId, _gc;
+		private uint _wId;
 		private ushort _width;
 		private ushort _height;
 
@@ -171,9 +160,14 @@ namespace Amity
 			Draw?.Invoke();
 		}
 
-		public IDrawingContext GetDrawingContext()
+		public IDrawingContext CreateDrawingContext()
 		{
-			return new DrawingContext(this);
+			return new DrawingContext(Connect(), _wId);
+		}
+
+		public IDrawingContext CreateBitmap(Size size)
+		{
+			return new DrawingContext(Connect(), size, _wId);
 		}
 
 		public void Invalidate()
@@ -185,11 +179,60 @@ namespace Amity
 			public Color? Brush { get; set; }
 			public Color? Pen { get; set; }
 
-			private X11Window _parent;
+			private Color _cachedForeground = Color.White;
 
-			public DrawingContext(X11Window parent)
+			private X11.Transport _c;
+			private uint _gc;
+			private uint _drawable;
+			private bool _isWindow;
+
+			public DrawingContext(X11.Transport c, uint window)
 			{
-				_parent = parent;
+				_c = c;
+				_c.Request(new CreateGC
+				{
+					Drawable = _drawable = window,
+					ContextID = _gc = c.ClaimID()
+				},
+				new GCValues { Foreground = (Color32)_cachedForeground });
+				_isWindow = true;
+			}
+
+			public DrawingContext(X11.Transport c, Size size, uint window)
+			{
+				_c = c;
+				_c.Request(new CreatePixmap
+				{
+					Drawable = window,
+					Depth = 24,
+					Width = (ushort)size.Width,
+					Height = (ushort)size.Height,
+					PixmapID = _drawable = c.ClaimID()
+				});
+				_c.Request(new CreateGC
+				{
+					Drawable = _drawable,
+					ContextID = _gc = c.ClaimID()
+				},
+				new GCValues { Foreground = (Color32)_cachedForeground });
+			}
+
+			private bool SetColor(Color? color)
+			{
+				if (!color.HasValue) { return false; }
+				if (_cachedForeground != color)
+				{
+					_cachedForeground = color.Value;
+					_c.Request(new ChangeGC
+					{
+						ContextID = _gc,
+					}, new GCValues
+					{
+						Foreground = (Color32)_cachedForeground,
+						Background = (Color32)Color.Cyan // TODO: use this properly
+					});
+				}
+				return true;
 			}
 
 			public ReadOnlySpan<string> Fonts => throw new NotImplementedException();
@@ -204,26 +247,33 @@ namespace Amity
 				throw new NotImplementedException();
 			}
 
-			public void BeginPolygon()
+			public void Polygon(ReadOnlySpan<Point> points)
 			{
 				throw new NotImplementedException();
 			}
 
 			public void Dispose()
 			{
-			}
-
-			public void EndPolygon(bool forceClose)
-			{
-				throw new NotImplementedException();
+				_c.Request(new FreeGC
+				{
+					GContext = _gc
+				});
+				_c.ReleaseID(_gc);
+				if (!_isWindow)
+				{
+					_c.Request(new FreePixmap
+					{
+						Pixmap = _drawable
+					});
+					_c.ReleaseID(_drawable);
+				}
 			}
 
 			public void Image(Span<Color32> data, Size size, Point destination)
 			{
-				var c = _parent.Connect();
 				// There's a request size limit, so we need to upload the image
 				// a section at a time
-				var maxLinesPerRequest = c.Info.MaxRequestLength / (size.Width * 4);
+				var maxLinesPerRequest = _c.Info.MaxRequestLength / (size.Width * 4);
 				if (maxLinesPerRequest <= 0)
 				{
 					// TODO: Better support for this case?
@@ -235,12 +285,12 @@ namespace Amity
 					if (size.Height - y < thisHeight) {
 						thisHeight = size.Height - y;
 					}
-					c.Request(new X11.PutImage
+					_c.Request(new X11.PutImage
 					{
 						Format = X11.ImageFormat.ZPixmap,
 						Depth = 24,
-						Drawable = _parent._wId,
-						GContext = _parent._gc,
+						Drawable = _drawable,
+						GContext = _gc,
 						Width = (ushort)size.Width,
 						Height = (ushort)thisHeight,
 						DstX = (short)destination.X,
@@ -257,40 +307,71 @@ namespace Amity
 
 			public void Line(Point a, Point b)
 			{
-				var c = _parent.Connect();
 				Span<X11.Point> points = stackalloc X11.Point[2];
 				points[0] = new X11.Point{X = (ushort)a.X, Y = (ushort)a.Y};
 				points[1] = new X11.Point{X = (ushort)b.X, Y = (ushort)b.Y};
-				c.Request(new PolyLine
+				_c.Request(new PolyLine
 				{
 					CoordinateMode = CoordinateMode.Origin,
-					Drawable = _parent._wId,
-					GContext = _parent._gc,
+					Drawable = _drawable,
+					GContext = _gc,
 				},
 				points);
 			}
 
-			public void PushPoint(Point next)
-			{
-				throw new NotImplementedException();
-			}
-
 			public void Rectangle(Rectangle rect)
 			{
-				throw new NotImplementedException();
+				Span<Rect> rects = stackalloc Rect[1];
+				rects[0] = (Rect)rect;
+				if (SetColor(Brush))
+				{
+					_c.Request(new PolyFillRectangle
+					{
+						Drawable = _drawable,
+						GContext = _gc,
+					}, rects);
+				}
+				if (SetColor(Pen))
+				{
+					_c.Request(new PolyRectangle
+					{
+						CoordinateMode = CoordinateMode.Origin,
+						Drawable = _drawable,
+						GContext = _gc,
+					}, rects);
+				}
 			}
 
 			public void Text(Point position, string font, string text)
 			{
-				var c = _parent.Connect();
-				c.Request(new ImageText8
+				// TODO: Support newlines, wrapping etc.?
+				_c.Request(new PolyText8
 				{
-					Drawable = _parent._wId,
-					GContext = _parent._gc,
+					Drawable = _drawable,
+					GContext = _gc,
 					X = (short)position.X,
 					Y = (short)position.Y,
 				},
 				text);
+			}
+
+			public void CopyTo(Rectangle srcRect, Point dstPos, IDrawingContext dst)
+			{
+				var dstC = (DrawingContext)dst;
+				_c.Request(new CopyArea
+				{
+					SrcDrawable = _drawable,
+					DstDrawable = dstC._drawable,
+					GContext = dstC._gc,
+					Dst = new Rect {
+						X = (short)dstPos.X,
+						Y = (short)dstPos.Y,
+						Width = (ushort)srcRect.Width,
+						Height = (ushort)srcRect.Height
+					},
+					SrcX = (short)srcRect.X,
+					SrcY = (short)srcRect.Y
+				});
 			}
 		}
 	}

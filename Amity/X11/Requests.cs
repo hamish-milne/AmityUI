@@ -197,7 +197,8 @@ namespace Amity.X11
 		public WindowClass Class;
 		public uint Visual;
 
-		public int MaxSize => ValuesMask.MaxSize<WindowValues>();
+		public int GetMaxSize(in WindowValues data)
+			=> ValuesMask.MaxSize<WindowValues>();
 		public int WriteTo(in WindowValues data, Span<byte> output, Span<byte> rData) =>
 			ValuesMask.WriteTo(data, output);
 	}
@@ -307,7 +308,8 @@ namespace Amity.X11
 		public byte Opcode => 2;
 		public uint Window;
 
-		public int MaxSize => ValuesMask.MaxSize<WindowValues>();
+		public int GetMaxSize(in WindowValues data)
+			=> ValuesMask.MaxSize<WindowValues>();
 		public int WriteTo(in WindowValues data, Span<byte> output, Span<byte> rData) =>
 			ValuesMask.WriteTo(data, output);
 	}
@@ -446,7 +448,8 @@ namespace Amity.X11
 		private uint _unused;
 		public uint Window;
 
-		public int MaxSize => ValuesMask.MaxSize<ConfigurationValues>();
+		public int GetMaxSize(in ConfigurationValues data)
+			=> ValuesMask.MaxSize<ConfigurationValues>();
 		public int WriteTo(in ConfigurationValues data, Span<byte> output, Span<byte> rData) =>
 			ValuesMask.WriteTo(data, output);
 	}
@@ -505,7 +508,8 @@ namespace Amity.X11
 		[MarshalAs(U1)] public bool OnlyIfExists;
 		private ushort _requestLength;
 
-		public int MaxSize => 65535; // TODO: String length
+		public int GetMaxSize(in string data) =>
+			4 + Encoding.UTF8.GetMaxByteCount(data?.Length ?? 0);
 		public unsafe int WriteTo(in string data, Span<byte> output, Span<byte> rData)
 		{
 			var str = data ?? string.Empty;
@@ -558,7 +562,7 @@ namespace Amity.X11
 		public byte Format;
 		private ushort _unused;
 		
-		public int MaxSize => 65535;
+		public int GetMaxSize(in Memory<byte> data) => data.Length + 4;
 		public int WriteTo(in Memory<byte> data, Span<byte> output, Span<byte> rData)
 		{
 			switch (Format)
@@ -741,6 +745,33 @@ namespace Amity.X11
 		public byte Opcode => 37;
 	}
 
+	[StructLayout(LayoutKind.Sequential, Pack = 4)]
+	public struct OpenFont : X11DataRequest<string>
+	{
+		public byte Opcode => 45;
+		private uint _unused;
+		public uint FontID;
+		private ushort _nameLength;
+
+		public int GetMaxSize(in string data) =>
+			Encoding.UTF8.GetMaxByteCount(data?.Length ?? 0);
+
+		public int WriteTo(in string data, Span<byte> output, Span<byte> rData)
+		{
+			var count = data.WriteOut(output);
+			MemoryMarshal.Cast<byte, ushort>(rData)[4] = (ushort)count;
+			return count;
+		}
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct CloseFont : X11Request
+	{
+		public byte Opcode => 46;
+		private uint _unused;
+		public uint FontID;
+	}
+
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct ListFonts : X11DataRequestReply<string, ListFonts.Reply>
 	{
@@ -749,7 +780,8 @@ namespace Amity.X11
 		public ushort MaxNames;
 		private ushort _patternLength;
 
-		public int MaxSize => 65535;
+		public int GetMaxSize(in string data) =>
+			Encoding.UTF8.GetMaxByteCount(data?.Length ?? 0);
 
 		public int WriteTo(in string data, Span<byte> output, Span<byte> rData)
 		{
@@ -783,6 +815,27 @@ namespace Amity.X11
 		}
 
 	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct CreatePixmap : X11Request
+	{
+		public byte Opcode => 53;
+		private byte _opcode;
+		public byte Depth;
+		private ushort _requestLength;
+		public uint PixmapID;
+		public uint Drawable;
+		public ushort Width;
+		public ushort Height;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct FreePixmap : X11Request
+	{
+		public byte Opcode => 54;
+		private uint _unused;
+		public uint Pixmap;
+	};
 
 	public enum GCFunction : byte
 	{
@@ -888,10 +941,33 @@ namespace Amity.X11
 		public uint ContextID;
 		public uint Drawable;
 
-		public int MaxSize => ValuesMask.MaxSize<GCValues>();
+		public int GetMaxSize(in GCValues data)
+			=> ValuesMask.MaxSize<GCValues>();
 		public int WriteTo(in GCValues data, Span<byte> output, Span<byte> rData) =>
 			ValuesMask.WriteTo(data, output);
 	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct ChangeGC : X11DataRequest<GCValues>
+	{
+		public byte Opcode => 56;
+		private uint _unused;
+		public uint ContextID;
+
+		public int GetMaxSize(in GCValues data)
+			=> ValuesMask.MaxSize<GCValues>();
+		public int WriteTo(in GCValues data, Span<byte> output, Span<byte> rData) =>
+			ValuesMask.WriteTo(data, output);
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct FreeGC : X11Request
+	{
+		public byte Opcode => 60;
+		private uint _unused;
+		public uint GContext;
+	};
+
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct ClearArea : X11Request
@@ -981,6 +1057,59 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct PolyFillRectangle : X11SpanRequest<Rect>
+	{
+		public byte Opcode => 70;
+		private byte _opcode;
+		private byte _unused;
+		private ushort _requestLength;
+		public uint Drawable;
+		public uint GContext;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct PolyText8 : X11DataRequest<string>
+	{
+		public byte Opcode => 74;
+		private uint _unused;
+		public uint Drawable;
+		public uint GContext;
+		public short X;
+		public short Y;
+
+		public int GetMaxSize(in string data) => data == null ? 0 :
+			Encoding.UTF8.GetMaxByteCount(data.Length) + (2 * (1 + data.Length/255));
+
+		private static unsafe bool WriteSegment(
+			ref ReadOnlySpan<char> data, ref int count, ref Span<byte> output)
+		{
+			var maxLen = Encoding.UTF8.GetMaxCharCount(250);
+			var len = data.Length <= maxLen ? data.Length : maxLen;
+			if (len == 0) { return true; }
+			fixed (char* inPtr = data)
+			fixed (byte* outPtr = output.Slice(2))
+			{
+				var c = Encoding.UTF8.GetBytes(inPtr, len, outPtr, output.Length);
+				output[0] = (byte)c;
+				output[1] = 0; // Delta
+				count += 2;
+				count += c;
+				output = output.Slice(2 + c);
+			}
+			data = data.Slice(len);
+			return false;
+		}
+
+		public int WriteTo(in string data, Span<byte> output, Span<byte> rData)
+		{
+			int count = 0;
+			var str = data.AsSpan();
+			while (!WriteSegment(ref str, ref count, ref output)) { }
+			return count;
+		}
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct ImageText8 : X11DataRequest<string>
 	{
 		public byte Opcode => 76;
@@ -990,7 +1119,8 @@ namespace Amity.X11
 		public short X;
 		public short Y;
 
-		public int MaxSize => 65535;
+		public int GetMaxSize(in string data) =>
+			Encoding.UTF8.GetMaxByteCount(data?.Length ?? 0);
 		public int WriteTo(in string data, Span<byte> output, Span<byte> rData)
 		{
 			var count = data.WriteOut(output);
@@ -1013,7 +1143,8 @@ namespace Amity.X11
 		public short X;
 		public short Y;
 
-		public int MaxSize => 65535;
+		public int GetMaxSize(in string data) =>
+			(data?.Length ?? 0) * sizeof(char);
 		public int WriteTo(in string data, Span<byte> output, Span<byte> rData)
 		{
 			var src = MemoryMarshal.Cast<char, byte>(data.AsSpan());

@@ -16,7 +16,8 @@ namespace Amity
 		Rectangle WindowArea { get; }
 		Rectangle ClientArea { get; }
 		void Show(Rectangle rect);
-		IDrawingContext GetDrawingContext();
+		IDrawingContext CreateDrawingContext();
+		IDrawingContext CreateBitmap(Size size);
 		void Invalidate();
 	}
 
@@ -24,9 +25,7 @@ namespace Amity
 	{
 		Color? Brush { get; set; }
 		Color? Pen { get; set; }
-		void BeginPolygon();
-		void PushPoint(Point next);
-		void EndPolygon(bool forceClose);
+		void Polygon(ReadOnlySpan<Point> points);
 		void Line(Point a, Point b);
 		void Rectangle(Rectangle rect);
 		void ArcChord(Rectangle rect, float angleA, float angleB);
@@ -34,6 +33,7 @@ namespace Amity
 		void Text(Point position, string font, string text);
 		ReadOnlySpan<string> Fonts { get; }
 		void Image(Span<Color32> data, Size size, Point destination);
+		void CopyTo(Rectangle srcRect, Point dstPos, IDrawingContext dst);
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 1)]

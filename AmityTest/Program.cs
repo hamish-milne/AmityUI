@@ -24,13 +24,19 @@ namespace Amity
             Pixel[] memory = null;
             Image<Pixel> image = null;
 
+            IDrawingContext buffer = null;
+            IDrawingContext dc = null;
+
 
             window.Resize += () =>
             {
                 var client = window.ClientArea;
+                dc = dc ?? window.CreateDrawingContext();
                 if (client.Width * client.Height == 0) { return; }
                 memory = new Pixel[client.Width * client.Height];
                 image = Image.WrapMemory<Pixel>(memory, client.Width, client.Height);
+                buffer?.Dispose();
+                buffer = window.CreateBitmap(client.Size);
             };
             
             window.Draw += () =>
@@ -42,13 +48,16 @@ namespace Amity
                 new PointF(0, 0)));
 
                 var client = window.ClientArea;
-                using (var dc = window.GetDrawingContext())
                 {
-                    dc.Image(MemoryMarshal.Cast<Pixel, Color32>(memory.AsSpan()),
-                        client.Size, new Point(0, 0));
-                    dc.Pen = Color.Magenta;
-                    dc.Line(new Point(0, 0), new Point(200, 300));
-                    dc.Text(new Point(0, 50), null, "Built-in text");
+                    // dc.Image(MemoryMarshal.Cast<Pixel, Color32>(memory.AsSpan()),
+                    //     client.Size, new Point(0, 0));
+                    // dc.Pen = Color.Magenta;
+                    buffer.Pen = Color.Red;
+                    buffer.Brush = Color.CadetBlue;
+                    buffer.Rectangle(new Rectangle(10, 60, 70, 40));
+                    buffer.Line(new Point(0, 0), new Point(200, 300));
+                    buffer.Text(new Point(0, 50), null, "Lorem Ipsum is simply dummy text of the printing and typesetting industry.\r\n Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.");
+                    buffer.CopyTo(client, new Point(0, 0), dc);
                 }
                 //MemoryMarshal.Cast<Rgba32, Color32>(memory.AsSpan()).CopyTo(window.Buffer);
 
