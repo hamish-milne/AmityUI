@@ -12,10 +12,11 @@ namespace Amity
 		event Action<int> KeyUp;
 		event Action Resize;
 		event Action Draw;
+		// TODO: Make all these settable
 		Point MousePosition { get; }
 		Rectangle WindowArea { get; }
 		Rectangle ClientArea { get; }
-		void Show(Rectangle rect);
+		void Show(Rectangle rect); // TODO: Don't take rect here. Property instead?
 		IDrawingContext CreateDrawingContext();
 		IDrawingContext CreateBitmap(Size size);
 		void Invalidate();
@@ -30,6 +31,8 @@ namespace Amity
 		void Rectangle(Rectangle rect);
 		void ArcChord(Rectangle rect, float angleA, float angleB);
 		void ArcSlice(Rectangle rect, float angleA, float angleB);
+		// TODO: Font object
+		// TODO: User-side glyph support?
 		void Text(Point position, string font, string text);
 		ReadOnlySpan<string> Fonts { get; }
 		void Image(Span<Color32> data, Size size, Point destination);

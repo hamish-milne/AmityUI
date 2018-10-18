@@ -11,9 +11,15 @@ namespace Amity
 
 	// From https://www.x.org/docs/XProtocol/proto.pdf
 
-	public class X11Window : IWindowAPI
+	public class X11Window : IWindow
 	{
-		public bool IsSupported() => GetServer(out var _, out var _);
+		// TODO: Check for IP connection as well
+		public static bool IsSupported => GetServer(out var _, out var _);
+
+		public static IWindow Factory(bool force)
+		{
+			return force || IsSupported ? new X11Window() : null;
+		}
 
 		private static readonly Regex _serverPattern =
 			new Regex(@"^([\w\.]*)(/unix)?:(\d+)(?:\.(\d+))?$");
@@ -55,29 +61,25 @@ namespace Amity
 		public event Action Resize;
 		public event Action Draw;
 
-		private X11.Transport _connection;
+		private readonly X11.Transport _connection;
 
 		public static EndPoint EndPoint { get; set; }
 
-		private X11.Transport Connect()
+		public X11Window()
 		{
-			if (_connection == null)
+			if (EndPoint == null)
 			{
-				if (EndPoint == null)
-				{
-					GetServer(out var endPoint, out var _);
-					EndPoint = endPoint;
-				}
-				_connection = new X11.Transport(EndPoint);
-				_connection.ListenTo<X11.KeyEvent>(HandleKeyEvent);
-				_connection.ListenTo<X11.ResizeRequestEvent>(HandleResize);
-				_connection.ListenTo<X11.ConfigureNotify>(HandleResize);
-				_connection.ListenTo<X11.Expose>(HandleExpose);
-				_connection.ListenTo<X11.MotionNotify>(HandleMouseMove);
-				_connection.ListenTo<X11.Error>(e => throw new Exception(e.ToString()));
-				_screen = _connection.Screens[0].Item1;
+				GetServer(out var endPoint, out var _);
+				EndPoint = endPoint;
 			}
-			return _connection;
+			_connection = new X11.Transport(EndPoint);
+			_connection.ListenTo<X11.KeyEvent>(HandleKeyEvent);
+			_connection.ListenTo<X11.ResizeRequestEvent>(HandleResize);
+			_connection.ListenTo<X11.ConfigureNotify>(HandleResize);
+			_connection.ListenTo<X11.Expose>(HandleExpose);
+			_connection.ListenTo<X11.MotionNotify>(HandleMouseMove);
+			_connection.ListenTo<X11.Error>(e => throw new Exception(e.ToString()));
+			_screen = _connection.Screens[0].Item1;
 		}
 
 		private void HandleExpose(X11.Expose e)
@@ -114,7 +116,7 @@ namespace Amity
 
 		public void Show(Rectangle rect)
 		{
-			var c = Connect();
+			var c = _connection;
 
 			c.Request(new X11.ListExtensions { },
 				out ListExtensions.Reply reply,
@@ -169,12 +171,12 @@ namespace Amity
 
 		public IDrawingContext CreateDrawingContext()
 		{
-			return new DrawingContext(Connect(), _wId);
+			return new DrawingContext(_connection, _wId);
 		}
 
 		public IDrawingContext CreateBitmap(Size size)
 		{
-			return new DrawingContext(Connect(), size, _wId);
+			return new DrawingContext(_connection, size, _wId);
 		}
 
 		public void Invalidate()

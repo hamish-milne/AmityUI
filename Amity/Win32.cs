@@ -7,10 +7,15 @@ namespace Amity
 	using System.Collections.Generic;
 	using System.Diagnostics;
 
-	public class Win32 : IWindowAPI
+	public class Win32 : IWindow
 	{
-		public bool IsSupported()
+		public static bool IsSupported
 			=> Environment.OSVersion.Platform == PlatformID.Win32NT;
+		
+		public static IWindow Factory(bool force)
+		{
+			return force || IsSupported ? new Win32() : null;
+		}
 
 		public Rectangle WindowArea
 		{

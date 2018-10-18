@@ -3,18 +3,17 @@ namespace Amity
 	using System;
 	using System.Linq;
 	using System.Drawing;
-	public interface IWindowAPI : IWindow
-	{
-		bool IsSupported();
-	}
+	using System.Collections.Generic;
 
 	public class WindowBase : IWindow
 	{
-		public static IWindowAPI WindowTemplate { get; set; } = typeof(WindowBase)
-			.Assembly.GetTypes().Where(typeof(IWindowAPI).IsAssignableFrom)
-			.Select(Activator.CreateInstance)
-			.Cast<IWindowAPI>()
-			.FirstOrDefault(w => w.IsSupported());
+		private static readonly List<Func<bool, IWindow>> _factories
+			= new List<Func<bool, IWindow>>();
+		
+		public static void Register(Func<bool, IWindow> factory)
+		{
+			_factories.Add(factory);
+		}
 
 		private readonly IWindow _api;
 
@@ -41,7 +40,12 @@ namespace Amity
 
 		public WindowBase()
 		{
-			_api = (IWindow)Activator.CreateInstance(WindowTemplate.GetType());
+			if (_factories.Count == 1)
+			{
+				_api = _factories[0](true);
+			} else {
+				_api = _factories.Select(f => f(false)).First(f => f != null);
+			}
 		}
 
 		public void Show(Rectangle rect) => _api.Show(rect);

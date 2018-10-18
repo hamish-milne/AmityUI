@@ -17,8 +17,10 @@ namespace Amity
     {
         static unsafe void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
-            var window = new X11Window();
+            WindowBase.Register(X11Window.Factory);
+            //WindowBase.Register(Win32.Factory);
+
+            var window = new WindowBase();
 
             Pixel[] memory = null;
             Image<Pixel> image = null;
