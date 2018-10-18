@@ -13,7 +13,7 @@ Win32:
 	✔ Exit the Show loop @done(18-09-30 23:14)
 	✔ Resize events @done(18-10-13 22:49)
 	☐ Style options
-	☐ Layered windows
+	☐ Layered windows 
 	✔ Drawing contexts with GDI @done(18-10-13 22:49)
 	✔ Mouse and button events @done(18-10-13 22:49)
 
@@ -23,6 +23,17 @@ XServer:
 	✔ Drawing context @done(18-10-13 22:49)
 	✔ Bitmap painting @done(18-10-13 22:49)
 	✔ Mouse and button events @done(18-10-13 22:49)
+	Extensions (https://www.x.org/docs/Xext/):
+		☐ SHAPE
+		☐ BIG-REQUESTS
+		☐ https://www.x.org/docs/XKB/XKBproto.pdf
+		☐ https://www.x.org/releases/X11R7.7/doc/xcmiscproto/xc-misc.html
+		☐ DOUBLE-BUFFER
+		☐ https://www.khronos.org/registry/OpenGL/specs/gl/glxencode1.3.pdf
+		☐ https://www.x.org/releases/X11R7.7/doc/fixesproto/fixesproto.txt
+		☐ https://www.x.org/releases/current/doc/renderproto/renderproto.txt
+		☐ XEVIE
+
 
 Quartz:
 	☐ Window creation

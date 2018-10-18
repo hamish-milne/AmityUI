@@ -17,7 +17,6 @@ namespace Amity
     {
         static unsafe void Main(string[] args)
         {
-            X11Window.EndPoint = new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 6000);
             Console.WriteLine("Hello World!");
             var window = new X11Window();
 
@@ -56,7 +55,7 @@ namespace Amity
                     buffer.Brush = Color.CadetBlue;
                     buffer.Rectangle(new Rectangle(10, 60, 70, 40));
                     buffer.Line(new Point(0, 0), new Point(200, 300));
-                    buffer.Text(new Point(0, 50), null, "Lorem Ipsum is simply dummy text of the printing and typesetting industry.\r\n Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.");
+                    buffer.Text(new Point(0, 50), null, "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.");
                     buffer.CopyTo(client, new Point(0, 0), dc);
                 }
                 //MemoryMarshal.Cast<Rgba32, Color32>(memory.AsSpan()).CopyTo(window.Buffer);

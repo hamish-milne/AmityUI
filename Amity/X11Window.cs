@@ -7,6 +7,7 @@ namespace Amity
 	using System.Drawing;
 	using X11;
 	using Point = System.Drawing.Point;
+	using System.Collections.Generic;
 
 	// From https://www.x.org/docs/XProtocol/proto.pdf
 
@@ -115,7 +116,11 @@ namespace Amity
 		{
 			var c = Connect();
 
-			_wId = c.ClaimID();
+			c.Request(new X11.ListExtensions { },
+				out ListExtensions.Reply reply,
+				out List<string> extensions);
+
+			_wId = (Window)c.ClaimID();
 			c.Request(new X11.CreateWindow
 			{
 				Rect = (X11.Rect)rect,
@@ -135,6 +140,8 @@ namespace Amity
 					| X11.Event.Exposure,
 				BackgroundPixel = 0xFFFFFFFF,
 			});
+			var props = new ICCMProperties(c, _wId);
+			props.WM_NAME = "My window!";
 			c.Request(new X11.MapWindow
 			{
 				Window = _wId
@@ -148,7 +155,7 @@ namespace Amity
 			c.MessageLoop();
 		}
 
-		private uint _wId;
+		private Window _wId;
 		private ushort _width;
 		private ushort _height;
 
@@ -182,37 +189,37 @@ namespace Amity
 			private Color _cachedForeground = Color.White;
 
 			private X11.Transport _c;
-			private uint _gc;
-			private uint _drawable;
+			private GContext _gc;
+			private Drawable _drawable;
 			private bool _isWindow;
 
-			public DrawingContext(X11.Transport c, uint window)
+			public DrawingContext(X11.Transport c, Window window)
 			{
 				_c = c;
 				_c.Request(new CreateGC
 				{
-					Drawable = _drawable = window,
-					ContextID = _gc = c.ClaimID()
+					Drawable = _drawable = (Drawable)window,
+					ContextID = _gc = (GContext)c.ClaimID()
 				},
 				new GCValues { Foreground = (Color32)_cachedForeground });
 				_isWindow = true;
 			}
 
-			public DrawingContext(X11.Transport c, Size size, uint window)
+			public DrawingContext(X11.Transport c, Size size, Window window)
 			{
 				_c = c;
 				_c.Request(new CreatePixmap
 				{
-					Drawable = window,
+					Drawable = (Drawable)window,
 					Depth = 24,
 					Width = (ushort)size.Width,
 					Height = (ushort)size.Height,
-					PixmapID = _drawable = c.ClaimID()
+					PixmapID = (Pixmap)(_drawable = (Drawable)c.ClaimID())
 				});
 				_c.Request(new CreateGC
 				{
 					Drawable = _drawable,
-					ContextID = _gc = c.ClaimID()
+					ContextID = _gc = (GContext)c.ClaimID()
 				},
 				new GCValues { Foreground = (Color32)_cachedForeground });
 			}
@@ -258,14 +265,14 @@ namespace Amity
 				{
 					GContext = _gc
 				});
-				_c.ReleaseID(_gc);
+				_c.ReleaseID((uint)_gc);
 				if (!_isWindow)
 				{
 					_c.Request(new FreePixmap
 					{
-						Pixmap = _drawable
+						Pixmap = (Pixmap)_drawable
 					});
-					_c.ReleaseID(_drawable);
+					_c.ReleaseID((uint)_drawable);
 				}
 			}
 

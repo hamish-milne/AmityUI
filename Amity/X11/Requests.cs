@@ -126,7 +126,7 @@ namespace Amity.X11
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct Screen
 	{
-		public uint Root;
+		public Window Root;
 		public uint DefaultColormap;
 		public Color32 WhitePixel;
 		public Color32 BlackPixel;
@@ -137,7 +137,7 @@ namespace Amity.X11
 		public ushort HeightMM;
 		public ushort MinMaps;
 		public ushort MaxMaps;
-		public uint RootVisual;
+		public Visual RootVisual;
 		public BackingStoreType BackingStores;
 		public byte SaveUnders;
 		public byte RootDepth;
@@ -165,7 +165,7 @@ namespace Amity.X11
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct VisualType
 	{
-		public uint VisualId;
+		public Visual VisualId;
 		public ColorType Class;
 		public byte BitsPerRgbValue;
 		public ushort ColormapEntries;
@@ -174,7 +174,6 @@ namespace Amity.X11
 		public uint BlueMask;
 		private uint _unused;
 	}
-
 
 	public enum WindowClass : ushort
 	{
@@ -190,12 +189,12 @@ namespace Amity.X11
 		private byte _opcode;
 		public byte Depth;
 		public ushort RequestLength;
-		public uint WindowId;
-		public uint Parent;
+		public Window WindowId;
+		public Window Parent;
 		public Rect Rect;
 		public ushort BorderWidth;
 		public WindowClass Class;
-		public uint Visual;
+		public Visual Visual;
 
 		public int GetMaxSize(in WindowValues data)
 			=> ValuesMask.MaxSize<WindowValues>();
@@ -285,7 +284,7 @@ namespace Amity.X11
 	[StructLayout(LayoutKind.Sequential, Pack = 8)]
 	public struct WindowValues
 	{
-		public Optional<uint> BackgroundPixmap;
+		public Optional<Pixmap> BackgroundPixmap;
 		public Optional<uint> BackgroundPixel;
 		public Optional<uint> BorderPixmap;
 		public Optional<uint> BorderPixel;
@@ -298,7 +297,7 @@ namespace Amity.X11
 		public Optional<bool> SaveUnder;
 		public Optional<Event> EventMask;
 		public Optional<Event> DoNotPropagateMask;
-		public Optional<uint> Colormap;
+		public Optional<Colormap> Colormap;
 		public Optional<uint> Cursor;
 	}
 
@@ -306,7 +305,7 @@ namespace Amity.X11
 	public struct ChangeWindowAttributes : X11DataRequest<WindowValues>
 	{
 		public byte Opcode => 2;
-		public uint Window;
+		public Window Window;
 
 		public int GetMaxSize(in WindowValues data)
 			=> ValuesMask.MaxSize<WindowValues>();
@@ -319,7 +318,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 3;
 		private uint _unused;
-		public uint Window;
+		public Window Window;
 
 		[StructLayout(LayoutKind.Sequential, Pack = 2)]
 		public struct Reply : X11Reply
@@ -328,7 +327,7 @@ namespace Amity.X11
 			public BackingStoreType BackingStore;
 			public ushort SequenceNumber;
 			private uint _replyLength;
-			public uint VisualID;
+			public Visual VisualID;
 			public WindowClass Class;
 			public byte BitGravity;
 			public byte WinGravity;
@@ -338,7 +337,7 @@ namespace Amity.X11
 			[MarshalAs(U1)] public bool MapIsInstalled;
 			public Visibility MapState;
 			[MarshalAs(U1)] public bool OverrideRedirect;
-			public uint Colormap;
+			public Colormap Colormap;
 			public Event AllEvents;
 			public Event YourEvents;
 			public Event DoNotPropagateMask;
@@ -350,7 +349,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 4;
 		private uint _unused;
-		public uint Window;
+		public Window Window;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -358,7 +357,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 5;
 		private uint _unused;
-		public uint Window;
+		public Window Window;
 	}
 
 	public enum SaveSet : byte
@@ -374,7 +373,7 @@ namespace Amity.X11
 		private byte _opcode;
 		public SaveSet SaveSet;
 		private ushort _requestLength;
-		public uint Window;
+		public Window Window;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -382,8 +381,8 @@ namespace Amity.X11
 	{
 		public byte Opcode => 7;
 		private uint _unused;
-		public uint Window;
-		public uint Parent;
+		public Window Window;
+		public Window Parent;
 		public short X;
 		public short Y;
 	}
@@ -393,7 +392,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 8;
 		private uint _unused;
-		public uint Window;
+		public Window Window;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -401,7 +400,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 9;
 		private uint _unused;
-		public uint Window;
+		public Window Window;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -409,7 +408,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 10;
 		private uint _unused;
-		public uint Window;
+		public Window Window;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -417,7 +416,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 11;
 		private uint _unused;
-		public uint Window;
+		public Window Window;
 	}
 
 	public enum StackMode : byte
@@ -437,7 +436,7 @@ namespace Amity.X11
 		public Optional<ushort> Width;
 		public Optional<ushort> Height;
 		public Optional<ushort> BorderWidth;
-		public Optional<uint> Sibling;
+		public Optional<Window> Sibling;
 		public Optional<StackMode> StackMode;
 	}
 
@@ -446,7 +445,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 12;
 		private uint _unused;
-		public uint Window;
+		public Window Window;
 
 		public int GetMaxSize(in ConfigurationValues data)
 			=> ValuesMask.MaxSize<ConfigurationValues>();
@@ -467,7 +466,7 @@ namespace Amity.X11
 		private byte _opcode;
 		public CirculateDirection Direction;
 		private ushort _requestLength;
-		public uint Window;
+		public Window Window;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -475,7 +474,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 14;
 		private uint _unused;
-		public uint Drawable;
+		public Drawable Drawable;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -483,7 +482,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 15;
 		private uint _unused;
-		public uint Window;
+		public Window Window;
 	}
 
 	public static partial class Util
@@ -494,14 +493,14 @@ namespace Amity.X11
 			fixed (char* cPtr = str)
 			fixed (byte* ptr = output)
 			{
-				return (ushort)Encoding.UTF8.GetBytes(
+				return Encoding.UTF8.GetBytes(
 					cPtr, str.Length, ptr, output.Length);
 			}
 		}
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct InternAtom : X11DataRequest<string>
+	public struct InternAtom : X11DataRequestReply<string, InternAtom.Reply>
 	{
 		public byte Opcode => 16;
 		private byte _opcode;
@@ -516,6 +515,15 @@ namespace Amity.X11
 			var byteCount = data.WriteOut(output.Slice(4));
 			MemoryMarshal.Cast<byte, ushort>(output)[0] = (ushort)byteCount;
 			return 4 + byteCount;
+		}
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2)]
+		public struct Reply : X11Reply
+		{
+			private ushort _unused;
+			public ushort SequenceNumber;
+			private uint _replyLength;
+			public uint Atom;
 		}
 	}
 
@@ -556,7 +564,7 @@ namespace Amity.X11
 		private byte _opcode;
 		public PropertyMode Mode;
 		private ushort _requestLength;
-		public uint Window;
+		public Window Window;
 		public uint Property;
 		public uint Type;
 		public byte Format;
@@ -587,7 +595,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 19;
 		private uint _unused;
-		public uint Window;
+		public Window Window;
 		public uint Property;
 	}
 
@@ -598,7 +606,7 @@ namespace Amity.X11
 		private byte _opcode;
 		[MarshalAs(U1)] public bool Delete;
 		private ushort _requestLength;
-		public uint Window;
+		public Window Window;
 		public uint Property;
 		public uint Type;
 		public uint Offset;
@@ -612,10 +620,11 @@ namespace Amity.X11
 			public ushort SequenceNumber;
 			private uint _replyLength;
 			public uint Type;
-			private uint _bytesAfter;
-			private uint _valueLength;
+			public uint BytesAfter;
+			public uint ValueLength;
 
-			public int ExpectedLength => (int)_valueLength * (Format / 8);
+			public int ExpectedLength => (int)ValueLength * (Format / 8);
+			// TODO: Don't allocate here!
 			public byte[] Read(Span<byte> data) => data.ToArray();
 		}
 	}
@@ -625,7 +634,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 21;
 		private uint _unused;
-		public uint Window;
+		public Window Window;
 
 		[StructLayout(LayoutKind.Sequential, Pack = 2, Size = 32)]
 		public struct Reply : X11Reply<uint[]>
@@ -664,7 +673,7 @@ namespace Amity.X11
 			private ushort _unused;
 			public ushort SequenceNumber;
 			private uint _replyLength;
-			public uint Window;
+			public Window Window;
 		}
 	}
 
@@ -823,8 +832,8 @@ namespace Amity.X11
 		private byte _opcode;
 		public byte Depth;
 		private ushort _requestLength;
-		public uint PixmapID;
-		public uint Drawable;
+		public Pixmap PixmapID;
+		public Drawable Drawable;
 		public ushort Width;
 		public ushort Height;
 	}
@@ -834,7 +843,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 54;
 		private uint _unused;
-		public uint Pixmap;
+		public Pixmap Pixmap;
 	};
 
 	public enum GCFunction : byte
@@ -938,8 +947,8 @@ namespace Amity.X11
 	{
 		public byte Opcode => 55;
 		private uint _unused;
-		public uint ContextID;
-		public uint Drawable;
+		public GContext ContextID;
+		public Drawable Drawable;
 
 		public int GetMaxSize(in GCValues data)
 			=> ValuesMask.MaxSize<GCValues>();
@@ -952,7 +961,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 56;
 		private uint _unused;
-		public uint ContextID;
+		public GContext ContextID;
 
 		public int GetMaxSize(in GCValues data)
 			=> ValuesMask.MaxSize<GCValues>();
@@ -965,7 +974,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 60;
 		private uint _unused;
-		public uint GContext;
+		public GContext GContext;
 	};
 
 
@@ -976,7 +985,7 @@ namespace Amity.X11
 		private byte _opcode;
 		[MarshalAs(U1)] public bool Exposures;
 		private ushort _requestLength;
-		public uint Window;
+		public Window Window;
 		public Rect Rect;
 	}
 
@@ -985,9 +994,9 @@ namespace Amity.X11
 	{
 		public byte Opcode => 62;
 		private uint _unused;
-		public uint SrcDrawable;
-		public uint DstDrawable;
-		public uint GContext;
+		public Drawable SrcDrawable;
+		public Drawable DstDrawable;
+		public GContext GContext;
 		public short SrcX;
 		public short SrcY;
 		public Rect Dst;
@@ -1013,8 +1022,8 @@ namespace Amity.X11
 		private byte _opcode;
 		public CoordinateMode CoordinateMode;
 		private ushort _requestLength;
-		public uint Drawable;
-		public uint GContext;
+		public Drawable Drawable;
+		public GContext GContext;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -1024,8 +1033,8 @@ namespace Amity.X11
 		private byte _opcode;
 		public CoordinateMode CoordinateMode;
 		private ushort _requestLength;
-		public uint Drawable;
-		public uint GContext;
+		public Drawable Drawable;
+		public GContext GContext;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -1041,8 +1050,8 @@ namespace Amity.X11
 		private byte _opcode;
 		public CoordinateMode CoordinateMode;
 		private ushort _requestLength;
-		public uint Drawable;
-		public uint GContext;
+		public Drawable Drawable;
+		public GContext GContext;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -1052,8 +1061,8 @@ namespace Amity.X11
 		private byte _opcode;
 		public CoordinateMode CoordinateMode;
 		private ushort _requestLength;
-		public uint Drawable;
-		public uint GContext;
+		public Drawable Drawable;
+		public GContext GContext;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -1063,8 +1072,8 @@ namespace Amity.X11
 		private byte _opcode;
 		private byte _unused;
 		private ushort _requestLength;
-		public uint Drawable;
-		public uint GContext;
+		public Drawable Drawable;
+		public GContext GContext;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -1072,8 +1081,8 @@ namespace Amity.X11
 	{
 		public byte Opcode => 74;
 		private uint _unused;
-		public uint Drawable;
-		public uint GContext;
+		public Drawable Drawable;
+		public GContext GContext;
 		public short X;
 		public short Y;
 
@@ -1114,8 +1123,8 @@ namespace Amity.X11
 	{
 		public byte Opcode => 76;
 		private uint _unused;
-		public uint Drawable;
-		public uint GContext;
+		public Drawable Drawable;
+		public GContext GContext;
 		public short X;
 		public short Y;
 
@@ -1138,8 +1147,8 @@ namespace Amity.X11
 	{
 		public byte Opcode => 77;
 		private uint _unused;
-		public uint Drawable;
-		public uint GContext;
+		public Drawable Drawable;
+		public GContext GContext;
 		public short X;
 		public short Y;
 
@@ -1173,8 +1182,8 @@ namespace Amity.X11
 		private byte _opcode;
 		public ImageFormat Format;
 		private ushort _requestLength;
-		public uint Drawable;
-		public uint GContext;
+		public Drawable Drawable;
+		public GContext GContext;
 		public ushort Width;
 		public ushort Height;
 		public short DstX;
@@ -1190,9 +1199,40 @@ namespace Amity.X11
 		private byte _opcode;
 		public ImageFormat Format;
 		public ushort _requestLength;
-		public uint Drawable;
+		public Drawable Drawable;
 		public Rect Rect;
 		public uint PlaneMask;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct ListExtensions : X11RequestReply<ListExtensions.Reply>
+	{
+		public byte Opcode => 99;
+		private uint _unused;
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2)]
+		public struct Reply : X11Reply<List<string>>
+		{
+			private byte _unused;
+			private byte _namesCount;
+			public ushort SequenceNumber;
+			private uint _replyLength;
+
+			public int ExpectedLength => (int)_replyLength * sizeof(uint);
+
+			public unsafe List<string> Read(Span<byte> data)
+			{
+				var ret = new List<string>();
+				for (int i = 0; (data.Length - i) >= 4; i++)
+				{
+					var span = data.Slice(i+1, data[i]);
+					fixed (byte* ptr = span)
+						ret.Add(Encoding.UTF8.GetString(ptr, span.Length));
+					i += data[i];
+				}
+				return ret;
+			}
+		}
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
