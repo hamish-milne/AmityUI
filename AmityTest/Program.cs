@@ -55,9 +55,12 @@ namespace Amity
                     // dc.Pen = Color.Magenta;
                     buffer.Pen = Color.Red;
                     buffer.Brush = Color.CadetBlue;
+                    buffer.TextColor = Color.Aquamarine;
                     buffer.Rectangle(new Rectangle(10, 60, 70, 40));
                     buffer.Line(new Point(0, 0), new Point(200, 300));
-                    buffer.Text(new Point(0, 50), null, "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.");
+                    buffer.Text(new Point(0, 25), null, "Α α, Β β, Γ γ, Δ δ, Ε ε, Ζ ζ, Η η, Θ θ, Ι ι, Κ κ, Λ λ, Μ μ, Ν ν, Ξ ξ, Ο ο, Π π, Ρ ρ, Σ σ/ς, Τ τ, Υ υ, Φ φ, Χ χ, Ψ ψ, and Ω ω.");
+                    buffer.Text(new Point(0, 50), null, "ASCII: ABCDabcd1234:@~?><!\"£$%^&*()\\ ミクがかわいい ¿No lo es? 💖 내가 어느 것을 더 좋아하는지 확실하지 않다. ");
+                    buffer.Line(new Point(0, 50), new Point(100, 50));
                     buffer.CopyTo(client, new Point(0, 0), dc);
                 }
                 //MemoryMarshal.Cast<Rgba32, Color32>(memory.AsSpan()).CopyTo(window.Buffer);

@@ -187,6 +187,7 @@ namespace Amity
 		{
 			public Color? Brush { get; set; }
 			public Color? Pen { get; set; }
+			public Color? TextColor { get; set; }
 
 			private Color _cachedForeground = Color.White;
 
@@ -238,7 +239,7 @@ namespace Amity
 					}, new GCValues
 					{
 						Foreground = (Color32)_cachedForeground,
-						Background = (Color32)Color.Cyan // TODO: use this properly
+						Background = (Color32)Color.Black // TODO: use this properly
 					});
 				}
 				return true;
@@ -353,15 +354,18 @@ namespace Amity
 
 			public void Text(Point position, string font, string text)
 			{
-				// TODO: Support newlines, wrapping etc.?
-				_c.Request(new PolyText8
+				if (SetColor(TextColor))
 				{
-					Drawable = _drawable,
-					GContext = _gc,
-					X = (short)position.X,
-					Y = (short)position.Y,
-				},
-				text);
+					// TODO: Support newlines, wrapping etc.?
+					_c.Request(new ImageText16
+					{
+						Drawable = _drawable,
+						GContext = _gc,
+						X = (short)position.X,
+						Y = (short)position.Y,
+					},
+					text);
+				}
 			}
 
 			public void CopyTo(Rectangle srcRect, Point dstPos, IDrawingContext dst)

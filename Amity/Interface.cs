@@ -26,6 +26,7 @@ namespace Amity
 	{
 		Color? Brush { get; set; }
 		Color? Pen { get; set; }
+		Color? TextColor { get; set; }
 		void Polygon(ReadOnlySpan<Point> points);
 		void Line(Point a, Point b);
 		void Rectangle(Rectangle rect);

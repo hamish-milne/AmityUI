@@ -215,18 +215,18 @@ namespace Amity
 
 		public IDrawingContext CreateBitmap(Size size)
 		{
-			throw new NotImplementedException();
+			return new DrawingContext(_hwnd, size);
 		}
 
 		private class DrawingContext : IDrawingContext
 		{
 			private IntPtr _hdc;
 			private IntPtr _bitmap;
-			private PAINTSTRUCT _paint;
 
 			public DrawingContext(IntPtr hwnd)
 			{
 				_hdc = GetDC(hwnd);
+				SetBkMode(_hdc, BkMode.TRANSPARENT);
 				SelectObject(_hdc, GetStockObject(StockObjects.DC_PEN));
 				SelectObject(_hdc, GetStockObject(StockObjects.DC_BRUSH));
 			}
@@ -235,8 +235,10 @@ namespace Amity
 			{
 				var tmpDc = GetDC(hwnd);
 				_hdc = CreateCompatibleDC(tmpDc);
+				SetBkMode(_hdc, BkMode.TRANSPARENT); // TODO: ConfigureDC?
 				_bitmap = CreateCompatibleBitmap(tmpDc, size.Width, size.Height);
 				ReleaseDC(tmpDc);
+				SelectObject(_hdc, _bitmap);
 				SelectObject(_hdc, GetStockObject(StockObjects.DC_PEN));
 				SelectObject(_hdc, GetStockObject(StockObjects.DC_BRUSH));
 			}
@@ -274,6 +276,23 @@ namespace Amity
 					if (value.HasValue) {
 						ThrowError(SetDCPenColor(_hdc, ToColorRef(value.Value))
 						== uint.MaxValue);
+					}
+				}
+			}
+
+			private bool _textEnabled = true;
+			public Color? TextColor
+			{
+				get => _textEnabled ? ToColor(GetTextColor(_hdc)) : default;
+				set
+				{
+					if (value.HasValue)
+					{
+						ThrowError(SetTextColor(_hdc, ToColorRef(value.Value))
+						== uint.MaxValue);
+						_textEnabled = true;
+					} else {
+						_textEnabled = false;
 					}
 				}
 			}
@@ -323,7 +342,21 @@ namespace Amity
 
 			public void Text(Point position, string font, string text)
 			{
-				throw new NotImplementedException();
+				if (!_textEnabled) { return; }
+				// TODO: Query font etc.
+				ExtTextOutW(_hdc, position.X, position.Y,
+					0, null, text, (uint)text.Length, null);
+				// TODO: Allow formatting etc?
+				// var dtp = new DRAWTEXTPARAMS
+				// {
+				// 	cbSize = (uint)Marshal.SizeOf<DRAWTEXTPARAMS>(),
+				// 	iTabLength = 4,
+				// 	iLeftMargin = 0,
+				// 	iRightMargin = 0
+				// };
+				// RECT rect = new Rectangle(position, new Size(0, 0));
+				// Win32.DrawTextExW(_hdc, text, text.Length, ref rect,
+				// 	DT.NoClip | DT.Left | DT.Top, ref dtp);
 			}
 
 			public unsafe void Image(
@@ -356,8 +389,8 @@ namespace Amity
 			public void CopyTo(Rectangle srcRect, Point dstPos, IDrawingContext dst)
 			{
 				var dstC = (DrawingContext)dst;
-				BitBlt(dstC._hdc, dstPos.X, dstPos.Y,
-					srcRect.Width, srcRect.Height, _hdc, srcRect.X, srcRect.Y, RasterOp.SRCCOPY);
+				ThrowError(0 == BitBlt(dstC._hdc, dstPos.X, dstPos.Y,
+					srcRect.Width, srcRect.Height, _hdc, srcRect.X, srcRect.Y, RasterOp.SRCCOPY));
 			}
 		}
 
@@ -983,6 +1016,17 @@ namespace Amity
 			public int top;
 			public int right;
 			public int bottom;
+
+			public static implicit operator RECT(Rectangle r)
+			{
+				return new RECT
+				{
+					left = r.Left,
+					top = r.Top,
+					right = r.Right,
+					bottom = r.Bottom
+				};
+			}
 		}
 
 		[DllImport(User)]
@@ -1007,7 +1051,7 @@ namespace Amity
 			IntPtr ho
 		);
 
-		[DllImport(Gdi)]
+		[DllImport(User)]
 		private static extern int ReleaseDC(
 			IntPtr hdc
 		);
@@ -1132,6 +1176,101 @@ namespace Amity
 			IntPtr lpvBits,
 			ref BITMAPINFOHEADER lpbmi,
 			DIB ColorUse
+		);
+
+		private enum DT : uint
+		{
+			Top = 0x0,
+			Left = 0x0,
+			Center = 0x1,
+			Right = 0x2,
+			VCenter = 0x4,
+			Bottom = 0x8,
+			WordBreak = 0x10,
+			SingleLine = 0x20,
+			ExpandTabs = 0x40,
+			TabStop = 0x80,
+			NoClip = 0x100,
+			ExternalLeading = 0x200,
+			CalcRect = 0x400,
+			NoPrefix = 0x800,
+			Internal = 0x1000,
+			EditControl = 0x2000,
+			PathEllipsis = 0x4000,
+			EndEllipsis = 0x8000,
+			ModifyString = 0x10000,
+			RtlReading = 0x20000,
+			WordEllipsis = 0x40000,
+			NoFullWidthCharBreak = 0x80000,
+			HidePrefix = 0x100000,
+			PrefixOnly = 0x200000
+		}
+
+		[StructLayout(LayoutKind.Sequential, Pack = 1)]
+		private struct DRAWTEXTPARAMS
+		{
+			public uint cbSize;
+			public int iTabLength;
+			public int iLeftMargin;
+			public int iRightMargin;
+			public uint uiLengthDrawn;
+		}
+
+		[DllImport(User)]
+		private static extern int DrawTextExW(
+			IntPtr hdc,
+			[MarshalAs(LPWStr)] string lpchText,
+			int cchText,
+			ref RECT lprc,
+			DT format,
+			ref DRAWTEXTPARAMS lpdtp
+		);
+
+		private enum ETO : uint
+		{
+			Clipped = 0x4,
+			GlyphIndex = 0x10,
+			IgnoreLanguage = 0x1000,
+			NumericsLatin = 0x800,
+			NumericsLocal = 0x400,
+			Opaque = 0x2,
+			PDY = 0x2000,
+			RtlReading = 0x800
+		}
+
+		[DllImport(Gdi)]
+		private static extern bool ExtTextOutW(
+			IntPtr hdc,
+			int x,
+			int y,
+			ETO options,
+			[MarshalAs(LPArray)] RECT[] lprect,
+			[MarshalAs(LPWStr)] string lpString,
+			uint c,
+			[MarshalAs(LPArray)] int[] lpDx
+		);
+
+		private enum BkMode : int
+		{
+			OPAQUE = 2,
+			TRANSPARENT = 1
+		}
+
+		[DllImport(Gdi)]
+		private static extern int SetBkMode(
+			IntPtr hdc,
+			BkMode mode
+		);
+
+		[DllImport(Gdi)]
+		private static extern uint SetTextColor(
+			IntPtr hdc,
+			uint color
+		);
+
+		[DllImport(Gdi)]
+		private static extern uint GetTextColor(
+			IntPtr hdc
 		);
 
 #endregion pinvoke

@@ -487,13 +487,16 @@ namespace Amity.X11
 
 	public static partial class Util
 	{
+		public static readonly Encoding Encoding
+			= Encoding.GetEncoding("ISO-8859-1");
+
 		public static unsafe int WriteOut(
 			this string str, Span<byte> output)
 		{
 			fixed (char* cPtr = str)
 			fixed (byte* ptr = output)
 			{
-				return Encoding.UTF8.GetBytes(
+				return Encoding.GetBytes(
 					cPtr, str.Length, ptr, output.Length);
 			}
 		}
@@ -508,7 +511,7 @@ namespace Amity.X11
 		private ushort _requestLength;
 
 		public int GetMaxSize(in string data) =>
-			4 + Encoding.UTF8.GetMaxByteCount(data?.Length ?? 0);
+			4 + Util.Encoding.GetMaxByteCount(data?.Length ?? 0);
 		public unsafe int WriteTo(in string data, Span<byte> output, Span<byte> rData)
 		{
 			var str = data ?? string.Empty;
@@ -1157,7 +1160,12 @@ namespace Amity.X11
 		public int WriteTo(in string data, Span<byte> output, Span<byte> rData)
 		{
 			var src = MemoryMarshal.Cast<char, byte>(data.AsSpan());
-			src.CopyTo(output);
+			// We need to reverse the endianness:
+			for (int i = 0; i < src.Length; i += sizeof(char))
+			{
+				output[i] = src[i+1];
+				output[i+1] = src[i];
+			}
 			var count = data.Length;
 			if (count > byte.MaxValue)
 			{
