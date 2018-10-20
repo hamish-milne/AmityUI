@@ -28,6 +28,20 @@ namespace Amity.X11
 				};
 			}
 		}
+
+		public static implicit operator Rectangle(Rect r)
+		{
+			checked
+			{
+				return new Rectangle
+				{
+					X = r.X,
+					Y = r.Y,
+					Width = r.Width,
+					Height = r.Height
+				};
+			}
+		}
 	};
 
 	
@@ -470,19 +484,42 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct GetGeometry : X11Request
+	public struct GetGeometry : X11RequestReply<GetGeometry.Reply>
 	{
 		public byte Opcode => 14;
 		private uint _unused;
 		public Drawable Drawable;
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2)]
+		public struct Reply : X11Reply
+		{
+			private byte _unused;
+			public byte Depth;
+			public ushort SequenceNumber;
+			private uint _replyLength;
+			public Window Root;
+			public Rect Rect;
+			public ushort BorderWidth;
+		}
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct QueryTree : X11Request
+	public struct QueryTree : X11RequestReply<QueryTree.Reply>
 	{
 		public byte Opcode => 15;
 		private uint _unused;
 		public Window Window;
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2)]
+		public struct Reply : X11SpanReply<Window>
+		{
+			private ushort _unused;
+			public ushort SequenceNumber;
+			private uint _replyLength;
+			public Window Root;
+			public Window Parent;
+			private ushort _childrenLength;
+		}
 	}
 
 	public static partial class Util
@@ -500,6 +537,14 @@ namespace Amity.X11
 					cPtr, str.Length, ptr, output.Length);
 			}
 		}
+
+		public static unsafe string GetString(
+			this Span<byte> span
+		)
+		{
+			fixed (byte* ptr = span)
+				return Encoding.GetString(ptr, span.Length);
+		}
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -512,7 +557,7 @@ namespace Amity.X11
 
 		public int GetMaxSize(in string data) =>
 			4 + Util.Encoding.GetMaxByteCount(data?.Length ?? 0);
-		public unsafe int WriteTo(in string data, Span<byte> output, Span<byte> rData)
+		public int WriteTo(in string data, Span<byte> output, Span<byte> rData)
 		{
 			var str = data ?? string.Empty;
 			var byteCount = data.WriteOut(output.Slice(4));
@@ -544,12 +589,8 @@ namespace Amity.X11
 			private uint _replyLength;
 			private ushort _nameLength;
 
-			public int ExpectedLength => _nameLength;
-			public unsafe string Read(Span<byte> data)
-			{
-				fixed (byte* src = data)
-					return Encoding.UTF8.GetString(src, _nameLength);
-			}
+			public string Read(Span<byte> data) =>
+				data.Slice(0, _nameLength).GetString();
 		}
 	}
 
@@ -616,7 +657,7 @@ namespace Amity.X11
 		public uint Length;
 
 		[StructLayout(LayoutKind.Sequential, Pack = 2, Size = 32)]
-		public struct Reply : X11Reply<byte[]>
+		public struct Reply : X11SpanReply<byte>
 		{
 			private byte _unused;
 			public byte Format;
@@ -625,10 +666,6 @@ namespace Amity.X11
 			public uint Type;
 			public uint BytesAfter;
 			public uint ValueLength;
-
-			public int ExpectedLength => (int)ValueLength * (Format / 8);
-			// TODO: Don't allocate here!
-			public byte[] Read(Span<byte> data) => data.ToArray();
 		}
 	}
 
@@ -640,16 +677,12 @@ namespace Amity.X11
 		public Window Window;
 
 		[StructLayout(LayoutKind.Sequential, Pack = 2, Size = 32)]
-		public struct Reply : X11Reply<uint[]>
+		public struct Reply : X11SpanReply<uint>
 		{
 			private ushort _unused;
 			public ushort SequenceNumber;
 			private uint _replyLength;
 			private ushort _atomsCount;
-
-			public int ExpectedLength => _atomsCount * sizeof(uint);
-			public uint[] Read(Span<byte> data) =>
-				MemoryMarshal.Cast<byte, uint>(data).ToArray();
 		}
 	}
 
@@ -810,16 +843,13 @@ namespace Amity.X11
 			private uint _replyLength;
 			private ushort _namesCount;
 
-			public int ExpectedLength => (int)_replyLength * sizeof(uint);
-
-			public unsafe List<string> Read(Span<byte> data)
+			public List<string> Read(Span<byte> data)
 			{
 				var ret = new List<string>();
 				for (int i = 0; (data.Length - i) >= 4; i++)
 				{
 					var span = data.Slice(i+1, data[i]);
-					fixed (byte* ptr = span)
-						ret.Add(Encoding.UTF8.GetString(ptr, span.Length));
+					ret.Add(span.GetString());
 					i += data[i];
 				}
 				return ret;
@@ -1228,14 +1258,13 @@ namespace Amity.X11
 
 			public int ExpectedLength => (int)_replyLength * sizeof(uint);
 
-			public unsafe List<string> Read(Span<byte> data)
+			public List<string> Read(Span<byte> data)
 			{
 				var ret = new List<string>();
 				for (int i = 0; (data.Length - i) >= 4; i++)
 				{
 					var span = data.Slice(i+1, data[i]);
-					fixed (byte* ptr = span)
-						ret.Add(Encoding.UTF8.GetString(ptr, span.Length));
+					ret.Add(span.GetString());
 					i += data[i];
 				}
 				return ret;
@@ -1250,5 +1279,11 @@ namespace Amity.X11
 		private byte _opcode;
 		public sbyte Percent;
 		private ushort _requestLength;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Size = 4)]
+	public struct NoOperation : X11Request
+	{
+		public byte Opcode => 127;
 	}
 }

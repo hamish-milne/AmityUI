@@ -35,8 +35,21 @@ namespace Amity
 			add => _api.Draw += value;
 			remove => _api.Draw -= value;
 		}
-		public Rectangle WindowArea => _api.WindowArea;
-		public Rectangle ClientArea => _api.ClientArea;
+		public Rectangle WindowArea
+		{
+			get => _api.WindowArea;
+			set => _api.WindowArea = value;
+		}
+		public Rectangle ClientArea
+		{
+			get => _api.ClientArea;
+			set => _api.ClientArea = value;
+		}
+		public bool IsVisible
+		{
+			get => _api.IsVisible;
+			set => _api.IsVisible = value;
+		}
 
 		public WindowBase()
 		{
@@ -48,9 +61,13 @@ namespace Amity
 			}
 		}
 
-		public void Show(Rectangle rect) => _api.Show(rect);
+		public void Run() => _api.Run();
 
-		public Point MousePosition => _api.MousePosition;
+		public Point MousePosition
+		{
+			get => _api.MousePosition;
+			set => _api.MousePosition = value;
+		}
 
 		public IDrawingContext CreateDrawingContext()
 			=> _api.CreateDrawingContext();

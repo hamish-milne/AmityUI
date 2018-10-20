@@ -42,8 +42,11 @@ namespace Amity.X11
 
 	public interface X11Reply<TData>
 	{
-		int ExpectedLength { get; }
 		TData Read(Span<byte> data);
+	}
+
+	public interface X11SpanReply<TData> where TData : unmanaged
+	{
 	}
 
 	public interface X11RequestData<TData>
@@ -59,7 +62,10 @@ namespace Amity.X11
 		public Transport(EndPoint endPoint)
 		{
 			_socket = new Socket(endPoint.AddressFamily,
-				SocketType.Stream, ProtocolType.IP);
+				SocketType.Stream, ProtocolType.IP)
+				{
+					ReceiveTimeout = 1000
+				};
 			_socket.Connect(endPoint);
 			if (_socket?.Connected != true)
 			{
@@ -212,7 +218,7 @@ namespace Amity.X11
 			Write(data);
 			_wBuffer[0] = data.Opcode;
 			Send(true);
-			reply = ReadReply<TReply>();
+			reply = ReadReply<TReply>(out var _);
 		}
 
 		public void Request<T, TReply, TReplyData>(in T data, out TReply reply, out TReplyData replyData)
@@ -224,6 +230,20 @@ namespace Amity.X11
 			Send(true);
 			(reply, replyData) = ReadReply<TReply, TReplyData>();
 		}
+
+		public void Request<T, TReply, TReplyData>(in T data, out TReply reply, out Span<TReplyData> replyData)
+			where T : unmanaged, X11RequestReply<TReply>
+			where TReply : unmanaged, X11SpanReply<TReplyData>
+			where TReplyData : unmanaged
+		{
+			Write(data);
+			_wBuffer[0] = data.Opcode;
+			Send(true);
+			reply = ReadReply<TReply>(out var length);
+			Grow(ref _rBuffer, length, false);
+			_socket.Receive(_rBuffer, 0, SocketFlags.None);
+			replyData = MemoryMarshal.Cast<byte, TReplyData>(_rBuffer);
+		}
 		
 		public void Request<T, TData, TReply>(in T data, TData extra, out TReply reply)
 			where T : unmanaged, X11DataRequestReply<TData, TReply>
@@ -233,7 +253,7 @@ namespace Amity.X11
 			_wBuffer[0] = data.Opcode;
 			WriteIndirect(data, extra);
 			Send(true);
-			reply = ReadReply<TReply>();
+			reply = ReadReply<TReply>(out var _);
 		}
 		
 		public void Request<T, TData, TReply, TReplyData>(
@@ -261,17 +281,25 @@ namespace Amity.X11
 
 		private readonly byte[] _msgBuffer = new byte[32];
 
+		// https://stackoverflow.com/a/2556369
+		private static bool ActuallyConnected(Socket socket) =>
+			!(socket.Poll(0, SelectMode.SelectRead) && socket.Available == 0);
+
 		public void MessageLoop()
 		{
 			_loop = true;
 			var span = _msgBuffer.AsSpan();
-			while (_loop)
+			while (_loop && ActuallyConnected(_socket))
 			{
-				do {
+				CommitEvents();
+				// When the X button is clicked, it sends a KillClient request
+				// which immediately de-selects all window events, including
+				// DestroyNotify, and the server immediately closes.
+				while (ActuallyConnected(_socket) && _socket.Available >= _msgBuffer.Length)
+				{
 					_socket.Receive(_msgBuffer);
 					HandleEvent();
-				} while (_socket.Available >= _msgBuffer.Length);
-				CommitEvents();
+				}
 			}
 		}
 
@@ -294,7 +322,7 @@ namespace Amity.X11
 			return false;
 		}
 
-		private T ReadReply<T>() where T : unmanaged
+		private T ReadReply<T>(out int replyLength) where T : unmanaged
 		{
 			while (true)
 			{
@@ -302,6 +330,7 @@ namespace Amity.X11
 				if (_msgBuffer[0] == 1)
 				{
 					CommitEvents();
+					replyLength = MemoryMarshal.Cast<byte, int>(_msgBuffer)[1];
 					return MemoryMarshal.Read<T>(_msgBuffer.AsSpan());
 				} else {
 					HandleEvent();
@@ -312,8 +341,7 @@ namespace Amity.X11
 		private (T, TData) ReadReply<T, TData>()
 			where T : unmanaged, X11Reply<TData>
 		{
-			var reply = ReadReply<T>();
-			var len = reply.ExpectedLength;
+			var reply = ReadReply<T>(out var len);
 			Grow(ref _rBuffer, len, false);
 			_socket.Receive(_rBuffer, len, SocketFlags.None);
 			var data = reply.Read(_rBuffer.AsSpan(0, len));
@@ -351,8 +379,9 @@ namespace Amity.X11
 			{
 				if (_eventData.HasValue)
 				{
-					OnEvent?.Invoke(_eventData.Value);
+					var ed = _eventData.Value;
 					_eventData = null;
+					OnEvent?.Invoke(ed);
 				}
 			}
 		}

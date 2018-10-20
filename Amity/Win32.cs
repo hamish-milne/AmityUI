@@ -28,6 +28,7 @@ namespace Amity
 					rect.bottom - rect.top
 				);
 			}
+			set => throw new NotImplementedException();
 		}
 
 		public Rectangle ClientArea
@@ -41,6 +42,7 @@ namespace Amity
 					rect.bottom - rect.top
 				);
 			}
+			set => throw new NotImplementedException();
 		}
 
 		private static void ThrowError(bool hasError)
@@ -151,10 +153,12 @@ namespace Amity
 		public event Action Resize;
 		public event Action Draw;
 
-		public Point MousePosition { get; private set; }
+		// TODO: Warp pointer
+		public Point MousePosition { get; set; }
 
-		public void Show(Rectangle rect)
+		public Win32()
 		{
+			
 			SetProcessDpiAwarenessContext(
 				DPI_AWARENESS_CONTEXT.PER_MONITOR_AWARE_V2);
 			var hInstance = GetModuleHandle(null);
@@ -178,8 +182,8 @@ namespace Amity
 				WS.OVERLAPPEDWINDOW,
 				0x80000000,
 				0x80000000,
-				rect.Width,
-				rect.Height,
+				0x80000000,
+				0x80000000,
 				IntPtr.Zero,
 				IntPtr.Zero,
 				hInstance,
@@ -188,10 +192,26 @@ namespace Amity
 			ThrowError(_hwnd == IntPtr.Zero);
 			_instances[_hwnd] = this;
 
-			ShowWindow(_hwnd, 1);
 			_dstDc = GetDC(_hwnd);
-			Resize?.Invoke();
+		}
 
+		public bool IsVisible
+		{
+			get => IsWindowVisible(_hwnd);
+			set
+			{
+				if (IsVisible)
+				{
+					ShowWindow(_hwnd, SW.Hide);
+				} else {
+					ShowWindow(_hwnd, SW.ShowNormal);
+					Resize?.Invoke();
+				}
+			}
+		}
+
+		public void Run()
+		{
 			while (GetMessage(out var msg, _hwnd, 0, 0) != 0)
 			{
 				TranslateMessage(ref msg);
@@ -223,24 +243,26 @@ namespace Amity
 			private IntPtr _hdc;
 			private IntPtr _bitmap;
 
-			public DrawingContext(IntPtr hwnd)
+			private void ConfigureDC()
 			{
-				_hdc = GetDC(hwnd);
 				SetBkMode(_hdc, BkMode.TRANSPARENT);
 				SelectObject(_hdc, GetStockObject(StockObjects.DC_PEN));
 				SelectObject(_hdc, GetStockObject(StockObjects.DC_BRUSH));
+			}
+
+			public DrawingContext(IntPtr hwnd)
+			{
+				_hdc = GetDC(hwnd);
+				ConfigureDC();
 			}
 
 			public DrawingContext(IntPtr hwnd, Size size)
 			{
 				var tmpDc = GetDC(hwnd);
 				_hdc = CreateCompatibleDC(tmpDc);
-				SetBkMode(_hdc, BkMode.TRANSPARENT); // TODO: ConfigureDC?
 				_bitmap = CreateCompatibleBitmap(tmpDc, size.Width, size.Height);
 				ReleaseDC(tmpDc);
-				SelectObject(_hdc, _bitmap);
-				SelectObject(_hdc, GetStockObject(StockObjects.DC_PEN));
-				SelectObject(_hdc, GetStockObject(StockObjects.DC_BRUSH));
+				ConfigureDC();
 			}
 
 			private static Color ToColor(uint cr) =>
@@ -778,8 +800,8 @@ namespace Amity
 			WS dwStyle,
 			uint X,
 			uint Y,
-			int nWidth,
-			int nHeight,
+			uint nWidth,
+			uint nHeight,
 			IntPtr hWndParent,
 			IntPtr hMenu,
 			IntPtr hInstance,
@@ -825,9 +847,31 @@ namespace Amity
 		);
 
 		[DllImport(User)]
+		private static extern bool IsWindowVisible(IntPtr hwnd);
+
+		[DllImport(User)]
+		private static extern bool CloseWIndow(IntPtr hwnd);
+
+		private enum SW : uint
+		{
+			Hide = 0,
+			ShowNormal = 1,
+			ShowMinimized = 2,
+			Maximize = 3,
+			ShowNoActivate = 4,
+			Show = 5,
+			Minimize = 6,
+			ShowMinNoActive = 7,
+			ShowNA = 8,
+			Restore = 9,
+			ShowDefault = 10,
+			ForceMinimize = 11
+		}
+
+		[DllImport(User)]
 		private static extern int ShowWindow(
 			IntPtr hWnd,
-			int nCmdShow
+			SW nCmdShow
 		);
 
 		[DllImport(User)]
@@ -1039,6 +1083,36 @@ namespace Amity
 		private static extern int GetWindowRect(
 			IntPtr hWnd,
 			out RECT lpRect
+		);
+
+		private enum SWP : uint
+		{
+			AsyncWindowPos = 0X4000,
+			DeferErase = 0X2000,
+			DrawFrame = 0X0020,
+			FrameChanged = 0X0020,
+			HideWindow = 0X0080,
+			NoActivate = 0X0010,
+			NoCopyBits = 0X0100,
+			NoMove = 0X0002,
+			NoOwnerZOrder = 0X0200,
+			NoRedraw = 0X0008,
+			NoReposition = 0X0200,
+			NoSendChanging = 0X0400,
+			NoSize = 0X0001,
+			NoZOrder = 0X0004,
+			ShowWindow = 0X0040
+		}
+
+		[DllImport(User)]
+		private static extern int GetWindowRect(
+			IntPtr hWnd,
+			IntPtr hWndInsertAfter,
+			int X,
+			int Y,
+			int cx,
+			int cy,
+			SWP uFlags
 		);
 
 		[DllImport(User)]

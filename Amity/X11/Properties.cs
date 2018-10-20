@@ -86,7 +86,7 @@ namespace Amity.X11
 				Type = GetAtom(Converter<T>.TypeName),
 				Offset = 0,
 				Length = (uint)_buffer.Length
-			}, out GetProperty.Reply reply, out byte[] replyData);
+			}, out GetProperty.Reply reply, out Span<byte> replyData);
 			if (reply.Format == 0)
 			{
 				throw new Exception($"Property {name} doesn't exist");

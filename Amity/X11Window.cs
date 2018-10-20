@@ -48,11 +48,40 @@ namespace Amity
 			return true;
 		}
 
-		public Point MousePosition => throw new NotImplementedException();
+		public Point MousePosition
+		{
+			get => throw new NotImplementedException();
+			set => throw new NotImplementedException();
+		}
 
-		public Rectangle WindowArea => throw new NotImplementedException();
+		public Rectangle WindowArea
+		{
+			get => throw new NotImplementedException();
+			set => throw new NotImplementedException();
+		}
 
-		public Rectangle ClientArea => new Rectangle(0, 0, _width, _height);
+		private Rectangle _cachedRect;
+
+		public Rectangle ClientArea
+		{
+			get
+			{
+				return _cachedRect;
+			}
+			set
+			{
+				_connection.Request(new X11.ConfigureWindow
+				{
+					Window = _wId
+				}, new X11.ConfigurationValues
+				{
+					X = (short)value.X,
+					Y = (short)value.Y,
+					Width = (ushort)value.Width,
+					Height = (ushort)value.Height
+				});
+			}
+		}
 
 		public event Action<Point> MouseMove;
 		public event Action<int> MouseDown;
@@ -78,8 +107,35 @@ namespace Amity
 			_connection.ListenTo<X11.ConfigureNotify>(HandleResize);
 			_connection.ListenTo<X11.Expose>(HandleExpose);
 			_connection.ListenTo<X11.MotionNotify>(HandleMouseMove);
+			_connection.ListenTo<X11.DestroyNotify>(e => _connection.DoQuitLoop());
 			_connection.ListenTo<X11.Error>(e => throw new Exception(e.ToString()));
 			_screen = _connection.Screens[0].Item1;
+
+			var c = _connection;
+			_wId = (Window)c.ClaimID();
+			c.Request(new X11.CreateWindow
+			{
+				//Rect = (X11.Rect)rect,
+				Visual = _screen.RootVisual,
+				Parent = _screen.Root,
+				Depth = _screen.RootDepth,
+				WindowId = _wId,
+				Class = X11.WindowClass.InputOutput,
+				Rect = (Rect)new Rectangle(0, 0, 100, 100)
+			},
+			new X11.WindowValues
+			{
+				EventMask = X11.Event.KeyPress
+					| X11.Event.KeyRelease
+					//| X11.Event.PointerMotion
+					| X11.Event.ResizeRedirect
+					| X11.Event.StructureNotify
+					| X11.Event.Exposure
+					| X11.Event.VisibilityChange,
+				BackgroundPixel = 0xFFFFFFFF,
+			});
+			var props = new ICCMProperties(c, _wId);
+			props.WM_NAME = "My window!";
 		}
 
 		private void HandleExpose(X11.Expose e)
@@ -99,12 +155,15 @@ namespace Amity
 
 		private void HandleResize(X11.ResizeRequestEvent e)
 		{
-			CreateBuffer(e.Width, e.Height);
+			_cachedRect.Width = e.Width;
+			_cachedRect.Height = e.Height;
+			Resize?.Invoke();
 		}
 
 		private void HandleResize(X11.ConfigureNotify e)
 		{
-			CreateBuffer(e.Rect.Width, e.Rect.Height);
+			_cachedRect = e.Rect;
+			Resize?.Invoke();
 		}
 
 		private void HandleMouseMove(X11.MotionNotify e)
@@ -114,60 +173,25 @@ namespace Amity
 
 		private static X11.Screen _screen;
 
-		public void Show(Rectangle rect)
+		public bool IsVisible
 		{
-			var c = _connection;
+			get => throw new NotImplementedException();
+			set
+			{
+				_connection.Request(new X11.MapWindow
+				{
+					Window = _wId
+				});
+				Resize?.Invoke();
+			}
+		}
 
-			c.Request(new X11.ListExtensions { },
-				out ListExtensions.Reply reply,
-				out List<string> extensions);
-
-			_wId = (Window)c.ClaimID();
-			c.Request(new X11.CreateWindow
-			{
-				Rect = (X11.Rect)rect,
-				Visual = _screen.RootVisual,
-				Parent = _screen.Root,
-				Depth = _screen.RootDepth,
-				WindowId = _wId,
-				Class = X11.WindowClass.InputOutput,
-			},
-			new X11.WindowValues
-			{
-				EventMask = X11.Event.KeyPress
-					| X11.Event.KeyRelease
-					| X11.Event.PointerMotion
-					| X11.Event.ResizeRedirect
-					| X11.Event.StructureNotify
-					| X11.Event.Exposure,
-				BackgroundPixel = 0xFFFFFFFF,
-			});
-			var props = new ICCMProperties(c, _wId);
-			props.WM_NAME = "My window!";
-			c.Request(new X11.MapWindow
-			{
-				Window = _wId
-			});
-			c.Request(new X11.ClearArea
-			{
-				Window = _wId,
-				Rect = (X11.Rect)rect,
-			});
-			CreateBuffer((ushort)rect.Width, (ushort)rect.Height);
-			c.MessageLoop();
+		public void Run()
+		{
+			_connection.MessageLoop();
 		}
 
 		private Window _wId;
-		private ushort _width;
-		private ushort _height;
-
-		private void CreateBuffer(ushort width, ushort height)
-		{
-			_width = width;
-			_height = height;
-			Resize?.Invoke();
-			Draw?.Invoke();
-		}
 
 		public IDrawingContext CreateDrawingContext()
 		{

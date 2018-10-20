@@ -28,6 +28,8 @@ namespace Amity
             IDrawingContext buffer = null;
             IDrawingContext dc = null;
 
+            window.ClientArea = new Rectangle(0, 0, 800, 400);
+
 
             window.Resize += () =>
             {
@@ -42,11 +44,11 @@ namespace Amity
             
             window.Draw += () =>
             {
-                image.Mutate(a => a.DrawText("ImageSharp",
-                new Font(SystemFonts.Families.First(f => f.Name == "Calibri"),
-                    24, FontStyle.Regular),
-                NamedColors<Pixel>.Red,
-                new PointF(0, 0)));
+                // image.Mutate(a => a.DrawText("ImageSharp",
+                // new Font(SystemFonts.Families.First(f => f.Name == "Calibri"),
+                //     24, FontStyle.Regular),
+                // NamedColors<Pixel>.Red,
+                // new PointF(0, 0)));
 
                 var client = window.ClientArea;
                 {
@@ -61,7 +63,7 @@ namespace Amity
                     buffer.Text(new Point(0, 25), null, "Α α, Β β, Γ γ, Δ δ, Ε ε, Ζ ζ, Η η, Θ θ, Ι ι, Κ κ, Λ λ, Μ μ, Ν ν, Ξ ξ, Ο ο, Π π, Ρ ρ, Σ σ/ς, Τ τ, Υ υ, Φ φ, Χ χ, Ψ ψ, and Ω ω.");
                     buffer.Text(new Point(0, 50), null, "ASCII: ABCDabcd1234:@~?><!\"£$%^&*()\\ ミクがかわいい ¿No lo es? 💖 내가 어느 것을 더 좋아하는지 확실하지 않다. ");
                     buffer.Line(new Point(0, 50), new Point(100, 50));
-                    buffer.CopyTo(client, new Point(0, 0), dc);
+                    buffer.CopyTo(new Rectangle(new Point(0, 0), client.Size), new Point(0, 0), dc);
                 }
                 //MemoryMarshal.Cast<Rgba32, Color32>(memory.AsSpan()).CopyTo(window.Buffer);
 
@@ -120,7 +122,8 @@ namespace Amity
                 //window.Buffer[pos.X + pos.Y*window.ClientArea.Width] = Color.Green;
                 //window.Invalidate();
             };
-            window.Show(new Rectangle(0, 0, 800, 400));
+            window.IsVisible = true;
+            window.Run();
         }
     }
 }
