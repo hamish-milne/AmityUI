@@ -269,16 +269,48 @@ namespace Amity
 				return true;
 			}
 
-			public ReadOnlySpan<string> Fonts => throw new NotImplementedException();
-
-			public void ArcChord(Rectangle rect, float angleA, float angleB)
+			private ArcFillMode _cachedFillMode;
+			private void SetArcFill(ArcFillMode fillMode)
 			{
-				throw new NotImplementedException();
+				if (_cachedFillMode != fillMode && fillMode != ArcFillMode.None)
+				{
+					_c.Request(new ChangeGC
+					{
+						ContextID = _gc
+					}, new GCValues
+					{
+						ArcMode = (ArcMode)(fillMode - 1)
+					});
+					_cachedFillMode = fillMode;
+				}
 			}
 
-			public void ArcSlice(Rectangle rect, float angleA, float angleB)
+			public ReadOnlySpan<string> Fonts => throw new NotImplementedException();
+
+			public void Arc(Rectangle rect, float angleA, float angleB,
+				ArcFillMode fillMode)
 			{
-				throw new NotImplementedException();
+				Span<Arc> arcs = stackalloc Arc[]
+				{
+					new Arc(rect, angleA, angleB)
+				};
+				if (fillMode != ArcFillMode.None && SetColor(Brush))
+				{
+					SetArcFill(fillMode);
+					_c.Request(new PolyFillArc
+						{
+							Drawable = _drawable,
+							GContext = _gc
+						}, arcs);
+				}
+				if (SetColor(Pen))
+				{
+					_c.Request(new PolyArc
+					{
+						Drawable = _drawable,
+						GContext = _gc
+					}, arcs);
+				}
 			}
 
 			public void Polygon(ReadOnlySpan<Point> points)
@@ -341,16 +373,19 @@ namespace Amity
 
 			public void Line(Point a, Point b)
 			{
-				Span<X11.Point> points = stackalloc X11.Point[2];
-				points[0] = new X11.Point{X = (ushort)a.X, Y = (ushort)a.Y};
-				points[1] = new X11.Point{X = (ushort)b.X, Y = (ushort)b.Y};
-				_c.Request(new PolyLine
+				if (SetColor(Pen))
 				{
-					CoordinateMode = CoordinateMode.Origin,
-					Drawable = _drawable,
-					GContext = _gc,
-				},
-				points);
+					Span<X11.Point> points = stackalloc X11.Point[2];
+					points[0] = new X11.Point{X = (ushort)a.X, Y = (ushort)a.Y};
+					points[1] = new X11.Point{X = (ushort)b.X, Y = (ushort)b.Y};
+					_c.Request(new PolyLine
+					{
+						CoordinateMode = CoordinateMode.Origin,
+						Drawable = _drawable,
+						GContext = _gc,
+					},
+					points);
+				}
 			}
 
 			public void Rectangle(Rectangle rect)

@@ -44,6 +44,19 @@ namespace Amity.X11
 		}
 	};
 
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct Arc
+	{
+		public Rect Rect;
+		public short Angle1, Angle2;
+
+		public Arc(Rectangle position, float angle1, float angle2)
+		{
+			Rect = (Rect)position;
+			Angle1 = (short)Math.Round((angle1 % 360) * 64);
+			Angle2 = (short)Math.Round((angle2 % 360) * 64);
+		}
+	}
 	
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct ConnectionRequest
@@ -1099,12 +1112,30 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct PolyArc : X11SpanRequest<Arc>
+	{
+		public byte Opcode => 68;
+		private uint _unused;
+		public Drawable Drawable;
+		public GContext GContext;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct PolyFillRectangle : X11SpanRequest<Rect>
 	{
 		public byte Opcode => 70;
 		private byte _opcode;
 		private byte _unused;
 		private ushort _requestLength;
+		public Drawable Drawable;
+		public GContext GContext;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct PolyFillArc : X11SpanRequest<Arc>
+	{
+		public byte Opcode => 71;
+		private uint _unused;
 		public Drawable Drawable;
 		public GContext GContext;
 	}
@@ -1120,12 +1151,54 @@ namespace Amity.X11
 		public short Y;
 
 		public int GetMaxSize(in string data) => data == null ? 0 :
-			Encoding.UTF8.GetMaxByteCount(data.Length) + (2 * (1 + data.Length/255));
+			Encoding.UTF8.GetMaxByteCount(data.Length) + (2 * (1 + data.Length/254));
 
 		private static unsafe bool WriteSegment(
 			ref ReadOnlySpan<char> data, ref int count, ref Span<byte> output)
 		{
-			var maxLen = Encoding.UTF8.GetMaxCharCount(250);
+			var maxLen = Encoding.UTF8.GetMaxCharCount(254);
+			var len = data.Length <= maxLen ? data.Length : maxLen;
+			if (len == 0) { return true; }
+			fixed (char* inPtr = data)
+			fixed (byte* outPtr = output.Slice(2))
+			{
+				var c = Encoding.UTF8.GetBytes(inPtr, len, outPtr, output.Length);
+				output[0] = (byte)c;
+				output[1] = 0; // Delta
+				count += 2;
+				count += c;
+				output = output.Slice(2 + c);
+			}
+			data = data.Slice(len);
+			return false;
+		}
+
+		public int WriteTo(in string data, Span<byte> output, Span<byte> rData)
+		{
+			int count = 0;
+			var str = data.AsSpan();
+			while (!WriteSegment(ref str, ref count, ref output)) { }
+			return count;
+		}
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct PolyText16 : X11DataRequest<string>
+	{
+		public byte Opcode => 74;
+		private uint _unused;
+		public Drawable Drawable;
+		public GContext GContext;
+		public short X;
+		public short Y;
+
+		public int GetMaxSize(in string data) => data == null ? 0 :
+			data.Length*sizeof(char) + (2 * (1 + data.Length/254));
+
+		private static unsafe bool WriteSegment(
+			ref ReadOnlySpan<char> data, ref int count, ref Span<byte> output)
+		{
+			var maxLen = Encoding.UTF8.GetMaxCharCount(254);
 			var len = data.Length <= maxLen ? data.Length : maxLen;
 			if (len == 0) { return true; }
 			fixed (char* inPtr = data)

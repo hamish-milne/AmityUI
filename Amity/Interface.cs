@@ -22,6 +22,13 @@ namespace Amity
 		void Invalidate();
 	}
 
+	public enum ArcFillMode
+	{
+		None,
+		Chord,
+		Slice
+	}
+
 	public interface IDrawingContext : IDisposable
 	{
 		Color? Brush { get; set; }
@@ -30,8 +37,8 @@ namespace Amity
 		void Polygon(ReadOnlySpan<Point> points);
 		void Line(Point a, Point b);
 		void Rectangle(Rectangle rect);
-		void ArcChord(Rectangle rect, float angleA, float angleB);
-		void ArcSlice(Rectangle rect, float angleA, float angleB);
+		void Arc(Rectangle rect, float angleA, float angleB,
+			ArcFillMode fillMode = ArcFillMode.None);
 		// TODO: Font object
 		// TODO: User-side glyph support?
 		void Text(Point position, string font, string text);

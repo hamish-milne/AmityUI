@@ -42,7 +42,8 @@ namespace Amity
 					rect.bottom - rect.top
 				);
 			}
-			set => throw new NotImplementedException();
+			set => ThrowError(!SetWindowPos(_hwnd, IntPtr.Zero,
+				value.X, value.Y, value.Width, value.Height, SWP.NoZOrder));
 		}
 
 		private static void ThrowError(bool hasError)
@@ -262,6 +263,7 @@ namespace Amity
 				_hdc = CreateCompatibleDC(tmpDc);
 				_bitmap = CreateCompatibleBitmap(tmpDc, size.Width, size.Height);
 				ReleaseDC(tmpDc);
+				SelectObject(_hdc, _bitmap);
 				ConfigureDC();
 			}
 
@@ -322,14 +324,43 @@ namespace Amity
 			public ReadOnlySpan<string> Fonts
 				=> throw new NotImplementedException();
 
-			public void ArcChord(Rectangle rect, float angleA, float angleB)
+			public void Arc(Rectangle rect, float angleA, float angleB,
+				ArcFillMode fillMode)
 			{
-				throw new NotImplementedException();
-			}
+				var radialLength = Math.Max(rect.Width, rect.Height) * 100;
+				var cx = (rect.Right - rect.Left) / 2;
+				var cy = (rect.Bottom - rect.Top) / 2;
+				angleA *= (float)Math.PI / 180;
+				angleA *= (float)Math.PI / 180;
+				var x3 = (int)(Math.Cos(angleA) * radialLength) + cx;
+				var y3 = (int)(Math.Sin(angleA) * radialLength) + cy;
+				var x4 = (int)(Math.Cos(angleB) * radialLength) + cx;
+				var y4 = (int)(Math.Sin(angleB) * radialLength) + cy;
+				switch (fillMode)
+				{
+					case ArcFillMode.Chord:
+						ThrowError(!Chord(_hdc,
+							rect.Left, rect.Top,
+							rect.Right, rect.Bottom,
+							x3, y3, x4, y4
+						));
+						break;
+					case ArcFillMode.Slice:
+						ThrowError(!Pie(_hdc,
+							rect.Left, rect.Top,
+							rect.Right, rect.Bottom,
+							x3, y3, x4, y4
+						));
+						break;
+					default:
+						ThrowError(!Win32.Arc(_hdc,
+							rect.Left, rect.Top,
+							rect.Right, rect.Bottom,
+							x3, y3, x4, y4
+						));
+						break;
 
-			public void ArcSlice(Rectangle rect, float angleA, float angleB)
-			{
-				throw new NotImplementedException();
+				}
 			}
 
 			public void Polygon(ReadOnlySpan<Point> points)
@@ -1105,7 +1136,7 @@ namespace Amity
 		}
 
 		[DllImport(User)]
-		private static extern int GetWindowRect(
+		private static extern bool SetWindowPos(
 			IntPtr hWnd,
 			IntPtr hWndInsertAfter,
 			int X,
@@ -1345,6 +1376,24 @@ namespace Amity
 		[DllImport(Gdi)]
 		private static extern uint GetTextColor(
 			IntPtr hdc
+		);
+
+		[DllImport(Gdi)]
+		private static extern bool Arc(
+			IntPtr hdc,
+			int x1, int y1, int x2, int y2, int x3, int y3, int x4, int y4
+		);
+
+		[DllImport(Gdi)]
+		private static extern bool Chord(
+			IntPtr hdc,
+			int x1, int y1, int x2, int y2, int x3, int y3, int x4, int y4
+		);
+
+		[DllImport(Gdi)]
+		private static extern bool Pie(
+			IntPtr hdc,
+			int x1, int y1, int x2, int y2, int x3, int y3, int x4, int y4
 		);
 
 #endregion pinvoke
