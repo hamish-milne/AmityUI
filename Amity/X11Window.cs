@@ -93,6 +93,7 @@ namespace Amity
 		private readonly X11.Transport _connection;
 
 		public static EndPoint EndPoint { get; set; }
+		public IFont LoadFont(string name) => throw new NotImplementedException();
 
 		public X11Window()
 		{
@@ -112,6 +113,11 @@ namespace Amity
 			_screen = _connection.Screens[0].Item1;
 
 			var c = _connection;
+			
+			c.Request(new ListFonts { MaxNames = 255 }, "*-medium-r-normal--0-0-0-0-?-0-iso8859-*", out ListFonts.Reply _, out List<string> fonts);
+			
+			c.Request(new GetFontPath { }, out ListFonts.Reply _, out List<string> paths);
+			
 			_wId = (Window)c.ClaimID();
 			c.Request(new X11.CreateWindow
 			{
@@ -235,6 +241,13 @@ namespace Amity
 			public DrawingContext(X11.Transport c, Size size, Window window)
 			{
 				_c = c;
+
+				uint font;
+				c.Request(new OpenFont
+				{
+					FontID = font = c.ClaimID()
+				}, "Calibri");
+
 				_c.Request(new CreatePixmap
 				{
 					Drawable = (Drawable)window,
@@ -248,7 +261,7 @@ namespace Amity
 					Drawable = _drawable,
 					ContextID = _gc = (GContext)c.ClaimID()
 				},
-				new GCValues { Foreground = (Color32)_cachedForeground });
+				new GCValues { Foreground = (Color32)_cachedForeground, Font = font });
 			}
 
 			private bool SetColor(Color? color)
@@ -315,7 +328,29 @@ namespace Amity
 
 			public void Polygon(ReadOnlySpan<Point> points)
 			{
-				throw new NotImplementedException();
+				if (points.Length == 0) { return; }
+				Span<X11.Point> xPoints = stackalloc X11.Point[points.Length + 1];
+				for (int i = 0; i < points.Length; i++) {
+					xPoints[i] = points[i];
+				}
+				xPoints[points.Length] = points[0];
+				if (SetColor(Brush))
+				{
+					_c.Request(new FillPoly
+					{
+						Drawable = _drawable,
+						GContext = _gc,
+						Shape = Shape.Complex
+					}, xPoints);
+				}
+				if (SetColor(Pen))
+				{
+					_c.Request(new PolyLine
+					{
+						Drawable = _drawable,
+						GContext = _gc
+					}, xPoints);
+				}
 			}
 
 			public void Dispose()
@@ -444,6 +479,24 @@ namespace Amity
 					SrcX = (short)srcRect.X,
 					SrcY = (short)srcRect.Y
 				});
+			}
+		}
+
+		private class XFont : IFont
+		{
+			public string Name => throw new NotImplementedException();
+
+			public void Dispose()
+			{
+
+			}
+
+			public XFont(Transport c, string name)
+			{
+				c.Request(new OpenFont
+				{
+					FontID = c.ClaimID()
+				}, name);
 			}
 		}
 	}

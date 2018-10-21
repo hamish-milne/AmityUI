@@ -20,6 +20,13 @@ namespace Amity
 		IDrawingContext CreateDrawingContext();
 		IDrawingContext CreateBitmap(Size size);
 		void Invalidate();
+		IFont LoadFont(string name);
+	}
+
+	public interface IFont : IDisposable
+	{
+		string Name { get; }
+
 	}
 
 	public enum ArcFillMode

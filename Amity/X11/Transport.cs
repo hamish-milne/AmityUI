@@ -330,7 +330,7 @@ namespace Amity.X11
 				if (_msgBuffer[0] == 1)
 				{
 					CommitEvents();
-					replyLength = MemoryMarshal.Cast<byte, int>(_msgBuffer)[1];
+					replyLength = MemoryMarshal.Cast<byte, int>(_msgBuffer)[1] * sizeof(uint);
 					return MemoryMarshal.Read<T>(_msgBuffer.AsSpan());
 				} else {
 					HandleEvent();
@@ -343,7 +343,8 @@ namespace Amity.X11
 		{
 			var reply = ReadReply<T>(out var len);
 			Grow(ref _rBuffer, len, false);
-			_socket.Receive(_rBuffer, len, SocketFlags.None);
+			if (len > 0)
+				_socket.Receive(_rBuffer, len, SocketFlags.None);
 			var data = reply.Read(_rBuffer.AsSpan(0, len));
 			return (reply, data);
 		}

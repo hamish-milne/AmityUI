@@ -64,6 +64,13 @@ namespace Amity
                     buffer.Text(new Point(0, 50), null, "ASCII: ABCDabcd1234:@~?><!\"£$%^&*()\\ ミクがかわいい ¿No lo es? 💖 내가 어느 것을 더 좋아하는지 확실하지 않다. ");
                     buffer.Line(new Point(0, 50), new Point(100, 50));
                     buffer.Arc(new Rectangle(100, 100, 200, 100), 0, 200, ArcFillMode.Chord);
+
+                    buffer.Polygon(new []{
+                        new Point(200, 200),
+                        new Point(250, 300),
+                        new Point(130, 400)
+                    });
+
                     buffer.CopyTo(new Rectangle(new Point(0, 0), client.Size), new Point(0, 0), dc);
                 }
                 //MemoryMarshal.Cast<Rgba32, Color32>(memory.AsSpan()).CopyTo(window.Buffer);

@@ -871,6 +871,12 @@ namespace Amity.X11
 
 	}
 
+	[StructLayout(LayoutKind.Sequential, Size = 4)]
+	public struct GetFontPath : X11RequestReply<ListFonts.Reply>
+	{
+		public byte Opcode => 52;
+	}
+
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct CreatePixmap : X11Request
 	{
@@ -1053,6 +1059,11 @@ namespace Amity.X11
 	{
 		public ushort X;
 		public ushort Y;
+
+		public static implicit operator Point(System.Drawing.Point p)
+		{
+			return new Point { X = (ushort)p.X, Y = (ushort)p.Y };
+		}
 	}
 
 	public enum CoordinateMode : byte
@@ -1120,6 +1131,24 @@ namespace Amity.X11
 		public GContext GContext;
 	}
 
+	public enum Shape : byte
+	{
+		Complex,
+		NonConvex,
+		Convex
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 4)]
+	public struct FillPoly : X11SpanRequest<Point>
+	{
+		public byte Opcode => 69;
+		private uint _unused;
+		public Drawable Drawable;
+		public GContext GContext;
+		public Shape Shape;
+		public CoordinateMode Coordinate;
+	}
+
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct PolyFillRectangle : X11SpanRequest<Rect>
 	{
@@ -1138,6 +1167,42 @@ namespace Amity.X11
 		private uint _unused;
 		public Drawable Drawable;
 		public GContext GContext;
+	}
+
+	public enum ImageFormat : byte
+	{
+		Bitmap,
+		XYPixmap,
+		ZPixmap
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 4)]
+	public struct PutImage : X11SpanRequest<Color32>
+	{
+		public byte Opcode => 72;
+		private byte _opcode;
+		public ImageFormat Format;
+		private ushort _requestLength;
+		public Drawable Drawable;
+		public GContext GContext;
+		public ushort Width;
+		public ushort Height;
+		public short DstX;
+		public short DstY;
+		public byte LeftPad;
+		public byte Depth;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct GetImage : X11Request
+	{
+		public byte Opcode => 73;
+		private byte _opcode;
+		public ImageFormat Format;
+		public ushort _requestLength;
+		public Drawable Drawable;
+		public Rect Rect;
+		public uint PlaneMask;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -1185,7 +1250,7 @@ namespace Amity.X11
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct PolyText16 : X11DataRequest<string>
 	{
-		public byte Opcode => 74;
+		public byte Opcode => 75;
 		private uint _unused;
 		public Drawable Drawable;
 		public GContext GContext;
@@ -1277,42 +1342,6 @@ namespace Amity.X11
 			rData[1] = (byte)count;
 			return src.Length;
 		}
-	}
-
-	public enum ImageFormat : byte
-	{
-		Bitmap,
-		XYPixmap,
-		ZPixmap
-	}
-
-	[StructLayout(LayoutKind.Sequential, Pack = 4)]
-	public struct PutImage : X11SpanRequest<Color32>
-	{
-		public byte Opcode => 72;
-		private byte _opcode;
-		public ImageFormat Format;
-		private ushort _requestLength;
-		public Drawable Drawable;
-		public GContext GContext;
-		public ushort Width;
-		public ushort Height;
-		public short DstX;
-		public short DstY;
-		public byte LeftPad;
-		public byte Depth;
-	}
-
-	[StructLayout(LayoutKind.Sequential, Pack = 2)]
-	public struct GetImage : X11Request
-	{
-		public byte Opcode => 73;
-		private byte _opcode;
-		public ImageFormat Format;
-		public ushort _requestLength;
-		public Drawable Drawable;
-		public Rect Rect;
-		public uint PlaneMask;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]

@@ -447,6 +447,8 @@ namespace Amity
 			}
 		}
 
+		public IFont LoadFont(string name) => throw new NotImplementedException();
+
 #region pinvoke
 
 		private const string User = "User32";
