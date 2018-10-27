@@ -328,12 +328,18 @@ namespace Amity.X11
 		{
 			while (true)
 			{
-				_socket.Receive(_msgBuffer);
-				if (_msgBuffer[0] == 1)
+				var buf = _msgBuffer;
+				if (Marshal.SizeOf<T>() > _msgBuffer.Length)
+				{
+					buf = new byte[Marshal.SizeOf<T>()];
+				}
+				_socket.Receive(buf);
+				if (buf[0] == 1)
 				{
 					CommitEvents();
-					replyLength = MemoryMarshal.Cast<byte, int>(_msgBuffer)[1] * sizeof(uint);
-					return MemoryMarshal.Read<T>(_msgBuffer.AsSpan());
+					replyLength = MemoryMarshal.Cast<byte, int>(buf)[1] * sizeof(uint);
+					replyLength -= (buf.Length - _msgBuffer.Length) / sizeof(uint);
+					return MemoryMarshal.Read<T>(buf);
 				} else {
 					HandleEvent();
 				}
