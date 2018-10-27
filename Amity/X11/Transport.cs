@@ -20,6 +20,7 @@ namespace Amity.X11
 	public interface X11SpanRequest<TSpan> : X11RequestBase
 		where TSpan : unmanaged
 	{
+		void PostWrite(Span<byte> data);
 	}
 
 	public interface X11DataRequest<TData> : X11RequestBase, X11RequestData<TData>
@@ -208,6 +209,7 @@ namespace Amity.X11
 			_wBufferIdx += extra.Length * Marshal.SizeOf<TSpan>();
 			Grow(ref _wBuffer, _wBufferIdx, _wBufferIdx > 0);
 			MemoryMarshal.Cast<TSpan, byte>(extra).CopyTo(_wBuffer.AsSpan(startIdx));
+			data.PostWrite(_wBuffer.AsSpan(0, _wBufferIdx));
 			Send(true);
 		}
 

@@ -551,6 +551,19 @@ namespace Amity.X11
 			}
 		}
 
+		public static int WriteOut16(
+			this string str, Span<byte> output)
+		{
+			var src = MemoryMarshal.Cast<char, byte>(str.AsSpan());
+			// We need to reverse the endianness:
+			for (int i = 0; i < src.Length; i += sizeof(char))
+			{
+				output[i] = src[i+1];
+				output[i+1] = src[i];
+			}
+			return src.Length;
+		}
+
 		public static unsafe string GetString(
 			this Span<byte> span
 		)
@@ -808,7 +821,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 45;
 		private uint _unused;
-		public uint FontID;
+		public Font FontID;
 		private ushort _nameLength;
 
 		public int GetMaxSize(in string data) =>
@@ -828,6 +841,106 @@ namespace Amity.X11
 		public byte Opcode => 46;
 		private uint _unused;
 		public uint FontID;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2, Size = 12)]
+	public struct CharInfo
+	{
+		public short LeftSideBearing;
+		public short RightSideBearing;
+		public short CharacterWidth;
+		public short Ascent;
+		public short Descent;
+		public ushort Attributes;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Size = 8)]
+	public struct FontProp
+	{
+		public Atom Name;
+		public uint Value;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct QueryFont : X11RequestReply<QueryFont.Reply>
+	{
+		public byte Opcode => 47;
+		private uint _unused;
+		public uint FontID;
+
+		public struct ReplyData
+		{
+			public FontProp[] Properties;
+			public CharInfo[] CharInfos;
+		}
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2)]
+		public struct Reply : X11Reply<ReplyData>
+		{
+			private ushort _unused;
+			public ushort SequenceNumber;
+			private uint _replyLength;
+			public CharInfo MinBounds;
+			private uint _unused1;
+			public CharInfo MaxBounds;
+			private uint _unused2;
+			public ushort MinChar;
+			public ushort MaxChar;
+			public ushort DefaultChar;
+			private ushort _propCount;
+			[MarshalAs(U1)] public bool IsRTL;
+			public byte MinByte;
+			public byte MaxByte;
+			[MarshalAs(U1)] public bool AllCharsExist;
+			public short FontAscent;
+			public short FontDescent;
+			private uint _charCount;
+
+			public ReplyData Read(Span<byte> data)
+			{
+				var properties = MemoryMarshal.Cast<byte, FontProp>
+					(data.Slice(0, _propCount * 8));
+				var charInfos = MemoryMarshal.Cast<byte, CharInfo>
+					(data.Slice(_propCount * 8, (int)_charCount * 12));
+				return new ReplyData
+				{
+					Properties = properties.ToArray(),
+					CharInfos = charInfos.ToArray()
+				};
+			}
+		}
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct QueryTextExtents : X11DataRequestReply<string, QueryTextExtents.Reply>
+	{
+		public byte Opcode => 48;
+		private byte _opcode;
+		[MarshalAs(U1)] private bool OddLength;
+		private ushort _requestLength;
+		public uint Font;
+
+		public int GetMaxSize(in string data) =>
+			(data?.Length ?? 0) * sizeof(char);
+
+		public int WriteTo(in string data, Span<byte> output, Span<byte> rData)
+			=> data.WriteOut16(output);
+
+		[StructLayout(LayoutKind.Sequential, Pack = 2)]
+		public struct Reply : X11Reply
+		{
+			private byte _opcode;
+			[MarshalAs(U1)] public byte IsRTL;
+			public ushort SequenceNumber;
+			private uint _replyLength;
+			public short FontAscent;
+			public short FontDescent;
+			public short OverallAscent;
+			public short OverallDescent;
+			public short OverallWidth;
+			public short OverallLeft;
+			public short OverallRight;
+		}
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -869,6 +982,43 @@ namespace Amity.X11
 			}
 		}
 
+	}
+
+	// TODO: ListFontsWithInfo - it has multiple reply segments!
+
+	[StructLayout(LayoutKind.Sequential, Size = 8)]
+	public struct SetFontPath : X11DataRequest<string[]>
+	{
+		public byte Opcode => 51;
+
+		public int GetMaxSize(in string[] data)
+		{
+			var r = 0;
+			foreach (var s in data)
+				r += 1 + s?.Length ?? 0;
+			return r;
+		}
+
+		public int WriteTo(in string[] data, Span<byte> output, Span<byte> rData)
+		{
+			var count = 0;
+			var pos = 0;
+			foreach (var str in data)
+			{
+				if (string.IsNullOrEmpty(str)) { continue; }
+				ref var lenRef = ref output[pos++];
+				var len = str.WriteOut(output.Slice(pos));
+				if (len > byte.MaxValue)
+				{
+					throw new Exception("String is too long!");
+				}
+				lenRef = (byte)len;
+				pos += len;
+				count++;
+			}
+			MemoryMarshal.Cast<byte, ushort>(rData)[2] = (ushort)count;
+			return pos;
+		}
 	}
 
 	[StructLayout(LayoutKind.Sequential, Size = 4)]
@@ -983,7 +1133,7 @@ namespace Amity.X11
 		public Optional<uint> Stipple;
 		public Optional<short> TileStippleXOrigin;
 		public Optional<short> TileStippleYOrigin;
-		public Optional<uint> Font;
+		public Optional<Font> Font;
 		public Optional<SubwindowMode> SubwindowMode;
 		public Optional<bool> GraphicsExposures;
 		public Optional<short> ClipXOrigin;
@@ -1022,13 +1172,58 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct CopyGC : X11Request
+	{
+		public byte Opcode => 57;
+		private uint _unused;
+		public GContext Src;
+		public GContext Dst;
+		public uint ValueMask;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct SetDashes : X11SpanRequest<byte>
+	{
+		public byte Opcode => 58;
+		private uint _unused;
+		public GContext GContext;
+		public ushort DashOffset;
+		private ushort _dashesLength;
+		
+		public void PostWrite(Span<byte> data)
+		{
+			MemoryMarshal.Cast<byte, ushort>(data)[5] = (ushort)data.Length;
+		}
+	}
+
+	public enum Ordering : byte
+	{
+		UnSorted,
+		YSorted,
+		YXSorted,
+		YXBanded
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct SetClipRectangles : X11SpanRequest<Rect>
+	{
+		public byte Opcode => 59;
+		private byte _opcode;
+		public Ordering Ordering;
+		private ushort _requestLength;
+		public GContext GContext;
+		public short ClipXOrigin;
+		public short ClipYOrigin;
+		public void PostWrite(Span<byte> data) { }
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct FreeGC : X11Request
 	{
 		public byte Opcode => 60;
 		private uint _unused;
 		public GContext GContext;
 	};
-
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct ClearArea : X11Request
@@ -1081,6 +1276,7 @@ namespace Amity.X11
 		private ushort _requestLength;
 		public Drawable Drawable;
 		public GContext GContext;
+		public void PostWrite(Span<byte> data) { }
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -1092,6 +1288,7 @@ namespace Amity.X11
 		private ushort _requestLength;
 		public Drawable Drawable;
 		public GContext GContext;
+		public void PostWrite(Span<byte> data) { }
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -1109,6 +1306,7 @@ namespace Amity.X11
 		private ushort _requestLength;
 		public Drawable Drawable;
 		public GContext GContext;
+		public void PostWrite(Span<byte> data) { }
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -1120,6 +1318,7 @@ namespace Amity.X11
 		private ushort _requestLength;
 		public Drawable Drawable;
 		public GContext GContext;
+		public void PostWrite(Span<byte> data) { }
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -1129,6 +1328,7 @@ namespace Amity.X11
 		private uint _unused;
 		public Drawable Drawable;
 		public GContext GContext;
+		public void PostWrite(Span<byte> data) { }
 	}
 
 	public enum Shape : byte
@@ -1147,6 +1347,7 @@ namespace Amity.X11
 		public GContext GContext;
 		public Shape Shape;
 		public CoordinateMode Coordinate;
+		public void PostWrite(Span<byte> data) { }
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -1158,6 +1359,7 @@ namespace Amity.X11
 		private ushort _requestLength;
 		public Drawable Drawable;
 		public GContext GContext;
+		public void PostWrite(Span<byte> data) { }
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -1167,6 +1369,7 @@ namespace Amity.X11
 		private uint _unused;
 		public Drawable Drawable;
 		public GContext GContext;
+		public void PostWrite(Span<byte> data) { }
 	}
 
 	public enum ImageFormat : byte
@@ -1191,6 +1394,7 @@ namespace Amity.X11
 		public short DstY;
 		public byte LeftPad;
 		public byte Depth;
+		public void PostWrite(Span<byte> data) { }
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
@@ -1327,20 +1531,14 @@ namespace Amity.X11
 			(data?.Length ?? 0) * sizeof(char);
 		public int WriteTo(in string data, Span<byte> output, Span<byte> rData)
 		{
-			var src = MemoryMarshal.Cast<char, byte>(data.AsSpan());
-			// We need to reverse the endianness:
-			for (int i = 0; i < src.Length; i += sizeof(char))
-			{
-				output[i] = src[i+1];
-				output[i+1] = src[i];
-			}
 			var count = data.Length;
 			if (count > byte.MaxValue)
 			{
 				throw new Exception("String is too long!");
 			}
+			data.WriteOut16(output);
 			rData[1] = (byte)count;
-			return src.Length;
+			return GetMaxSize(data);
 		}
 	}
 

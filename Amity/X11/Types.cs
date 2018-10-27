@@ -7,4 +7,5 @@ namespace Amity.X11
 	public enum Visual : uint { }
 	public enum Colormap : uint { }
 	public enum Drawable : uint { } // TODO: implicit cast from Pixmap and Window
+	public enum Font : uint { }
 }

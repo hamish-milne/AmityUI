@@ -76,6 +76,6 @@ namespace Amity
 			=> _api.CreateBitmap(size);
 		
 		public void Invalidate() => _api.Invalidate();
-		public IFont LoadFont(string name) => throw new NotImplementedException();
+		public ReadOnlySpan<IFontFamily> Fonts => _api.Fonts;
 	}
 }

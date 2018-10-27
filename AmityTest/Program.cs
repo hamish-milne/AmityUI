@@ -53,17 +53,19 @@ namespace Amity
                 var client = window.ClientArea;
                 {
                     // dc.Image(MemoryMarshal.Cast<Pixel, Color32>(memory.AsSpan()),
-                    //     client.Size, new Point(0, 0));
+                    //     client.Size, new PoSint(0, 0));
                     // dc.Pen = Color.Magenta;
                     buffer.Pen = Color.Red;
                     buffer.Brush = Color.CadetBlue;
                     buffer.TextColor = Color.Aquamarine;
+                    buffer.ArcFillMode = ArcFillMode.Chord;
+                    buffer.Font = window.Font("lucida").GetFont(15, FontSlant.Roman, FontWeight.Bold);
                     buffer.Rectangle(new Rectangle(10, 60, 70, 40));
                     buffer.Line(new Point(0, 0), new Point(200, 300));
-                    buffer.Text(new Point(0, 25), null, "Α α, Β β, Γ γ, Δ δ, Ε ε, Ζ ζ, Η η, Θ θ, Ι ι, Κ κ, Λ λ, Μ μ, Ν ν, Ξ ξ, Ο ο, Π π, Ρ ρ, Σ σ/ς, Τ τ, Υ υ, Φ φ, Χ χ, Ψ ψ, and Ω ω.");
-                    buffer.Text(new Point(0, 50), null, "ASCII: ABCDabcd1234:@~?><!\"£$%^&*()\\ ミクがかわいい ¿No lo es? 💖 내가 어느 것을 더 좋아하는지 확실하지 않다. ");
+                    buffer.Text(new Point(0, 25), "Α α, Β β, Γ γ, Δ δ, Ε ε, Ζ ζ, Η η, Θ θ, Ι ι, Κ κ, Λ λ, Μ μ, Ν ν, Ξ ξ, Ο ο, Π π, Ρ ρ, Σ σ/ς, Τ τ, Υ υ, Φ φ, Χ χ, Ψ ψ, and Ω ω.");
+                    buffer.Text(new Point(0, 50), "ASCII: ABCDabcd1234:@~?><!\"£$%^&*()\\ ミクがかわいい ¿No lo es? 💖 내가 어느 것을 더 좋아하는지 확실하지 않다. ");
                     buffer.Line(new Point(0, 50), new Point(100, 50));
-                    buffer.Arc(new Rectangle(100, 100, 200, 100), 0, 200, ArcFillMode.Chord);
+                    buffer.Arc(new Rectangle(100, 100, 200, 100), 0, 200);
 
                     buffer.Polygon(new []{
                         new Point(200, 200),

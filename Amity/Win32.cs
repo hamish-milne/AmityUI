@@ -17,6 +17,8 @@ namespace Amity
 			return force || IsSupported ? new Win32() : null;
 		}
 
+		public ReadOnlySpan<IFontFamily> Fonts => throw new NotImplementedException();
+
 		public Rectangle WindowArea
 		{
 			get {
@@ -321,11 +323,14 @@ namespace Amity
 				}
 			}
 
-			public ReadOnlySpan<string> Fonts
-				=> throw new NotImplementedException();
+			// TODO: Implement these:
+			public IFont Font { get; set; }
 
-			public void Arc(Rectangle rect, float angleA, float angleB,
-				ArcFillMode fillMode)
+			public float LineWidth { get; set; }
+
+			public ArcFillMode ArcFillMode { get; set; }
+
+			public void Arc(Rectangle rect, float angleA, float angleB)
 			{
 				var radialLength = Math.Max(rect.Width, rect.Height) * 100;
 				var cx = (rect.Right - rect.Left) / 2;
@@ -336,7 +341,7 @@ namespace Amity
 				var y3 = (int)(Math.Sin(angleA) * radialLength) + cy;
 				var x4 = (int)(Math.Cos(angleB) * radialLength) + cx;
 				var y4 = (int)(Math.Sin(angleB) * radialLength) + cy;
-				switch (fillMode)
+				switch (ArcFillMode)
 				{
 					case ArcFillMode.Chord:
 						ThrowError(!Chord(_hdc,
@@ -381,19 +386,24 @@ namespace Amity
 				Dispose();
 			}
 
-			public void Line(Point a, Point b)
+			public void Line(ReadOnlySpan<Point> points)
 			{
-				ThrowError(MoveToEx(_hdc, a.X, a.Y, out var _) == 0);
-				ThrowError(LineTo(_hdc, b.X, b.Y) == 0);
+				// TODO: Use PolyLine here?
+				ThrowError(MoveToEx(_hdc, points[0].X, points[0].Y, out var _) == 0);
+				foreach (var p in points.Slice(1))
+				{
+					ThrowError(LineTo(_hdc, p.X, p.Y) == 0);
+				}
 			}
 
-			public void Rectangle(Rectangle rect)
+			public void Rectangle(ReadOnlySpan<Rectangle> rects)
 			{
-				ThrowError(Win32.Rectangle(_hdc,
-					rect.Left, rect.Top, rect.Right, rect.Bottom) == 0);
+				foreach (var rect in rects)
+					ThrowError(Win32.Rectangle(_hdc,
+						rect.Left, rect.Top, rect.Right, rect.Bottom) == 0);
 			}
 
-			public void Text(Point position, string font, string text)
+			public void Text(Point position, string text)
 			{
 				if (!_textEnabled) { return; }
 				// TODO: Query font etc.

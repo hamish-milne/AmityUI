@@ -93,7 +93,30 @@ namespace Amity
 		private readonly X11.Transport _connection;
 
 		public static EndPoint EndPoint { get; set; }
-		public IFont LoadFont(string name) => throw new NotImplementedException();
+		private IFontFamily[] _fonts;
+		public ReadOnlySpan<IFontFamily> Fonts
+		{
+			get
+			{
+				if (_fonts == null) { LoadFonts(); }
+				return _fonts;
+			}
+		}
+
+		private void LoadFonts()
+		{
+			_connection.Request(new ListFonts { MaxNames = 65535 }, "*-iso10646-?",
+				out ListFonts.Reply _, out List<string> fonts);
+			var weightValues = fonts.Select(n => new XLFD(n).WeightName).Distinct().ToArray();
+			var widthValues = fonts.Select(n => new XLFD(n).SetWidthName).Distinct().ToArray();
+			_fonts = fonts.Select(n => new XLFD(n))
+				.GroupBy(f => f.FamilyName)
+				.Select(g =>  g.All(f => f.PointSize == 0) ?
+					new XScalableFont(_connection, g.ToArray()) :
+					(IFontFamily)new XBitmapFont(_connection, g.ToArray())
+				)
+				.ToArray();
+		}
 
 		public X11Window()
 		{
@@ -113,11 +136,7 @@ namespace Amity
 			_screen = _connection.Screens[0].Item1;
 
 			var c = _connection;
-			
-			c.Request(new ListFonts { MaxNames = 255 }, "*-medium-r-normal--0-0-0-0-?-0-iso8859-*", out ListFonts.Reply _, out List<string> fonts);
-			
-			c.Request(new GetFontPath { }, out ListFonts.Reply _, out List<string> paths);
-			
+
 			_wId = (Window)c.ClaimID();
 			c.Request(new X11.CreateWindow
 			{
@@ -219,6 +238,36 @@ namespace Amity
 			public Color? Pen { get; set; }
 			public Color? TextColor { get; set; }
 
+			private IFont _font;
+			public IFont Font
+			{
+				get => _font;
+				set
+				{
+					var xFont = value as XFont;
+					if (xFont != null)
+						_c.Request(
+							new ChangeGC { ContextID = _gc },
+							new GCValues { Font = xFont.GetID() }
+						);
+					_font = xFont;
+				}
+			}
+
+			private float _lineWidth = 0;
+			public float LineWidth
+			{
+				get => _lineWidth;
+				set
+				{
+					_c.Request(
+						new ChangeGC { ContextID = _gc },
+						new GCValues { LineWidth = (ushort)value }
+					);
+					_lineWidth = value;
+				}
+			}
+
 			private Color _cachedForeground = Color.White;
 
 			private X11.Transport _c;
@@ -241,13 +290,6 @@ namespace Amity
 			public DrawingContext(X11.Transport c, Size size, Window window)
 			{
 				_c = c;
-
-				uint font;
-				c.Request(new OpenFont
-				{
-					FontID = font = c.ClaimID()
-				}, "Calibri");
-
 				_c.Request(new CreatePixmap
 				{
 					Drawable = (Drawable)window,
@@ -261,7 +303,7 @@ namespace Amity
 					Drawable = _drawable,
 					ContextID = _gc = (GContext)c.ClaimID()
 				},
-				new GCValues { Foreground = (Color32)_cachedForeground, Font = font });
+				new GCValues { Foreground = (Color32)_cachedForeground });
 			}
 
 			private bool SetColor(Color? color)
@@ -283,33 +325,30 @@ namespace Amity
 			}
 
 			private ArcFillMode _cachedFillMode;
-			private void SetArcFill(ArcFillMode fillMode)
+			public ArcFillMode ArcFillMode
 			{
-				if (_cachedFillMode != fillMode && fillMode != ArcFillMode.None)
+				get => _cachedFillMode;
+				set
 				{
 					_c.Request(new ChangeGC
 					{
 						ContextID = _gc
 					}, new GCValues
 					{
-						ArcMode = (ArcMode)(fillMode - 1)
+						ArcMode = (ArcMode)(value - 1)
 					});
-					_cachedFillMode = fillMode;
+					_cachedFillMode = value;
 				}
 			}
 
-			public ReadOnlySpan<string> Fonts => throw new NotImplementedException();
-
-			public void Arc(Rectangle rect, float angleA, float angleB,
-				ArcFillMode fillMode)
+			public void Arc(Rectangle rect, float angleA, float angleB)
 			{
 				Span<Arc> arcs = stackalloc Arc[]
 				{
 					new Arc(rect, angleA, angleB)
 				};
-				if (fillMode != ArcFillMode.None && SetColor(Brush))
+				if (ArcFillMode != ArcFillMode.None && SetColor(Brush))
 				{
-					SetArcFill(fillMode);
 					_c.Request(new PolyFillArc
 						{
 							Drawable = _drawable,
@@ -406,34 +445,39 @@ namespace Amity
 				throw new NotImplementedException();
 			}
 
-			public void Line(Point a, Point b)
+			public void Line(ReadOnlySpan<Point> points)
 			{
 				if (SetColor(Pen))
 				{
-					Span<X11.Point> points = stackalloc X11.Point[2];
-					points[0] = new X11.Point{X = (ushort)a.X, Y = (ushort)a.Y};
-					points[1] = new X11.Point{X = (ushort)b.X, Y = (ushort)b.Y};
+					Span<X11.Point> xPoints = stackalloc X11.Point[points.Length];
+					for (int i = 0; i < points.Length; i++)
+					{
+						xPoints[i] = points[i];
+					}
 					_c.Request(new PolyLine
 					{
 						CoordinateMode = CoordinateMode.Origin,
 						Drawable = _drawable,
 						GContext = _gc,
 					},
-					points);
+					xPoints);
 				}
 			}
 
-			public void Rectangle(Rectangle rect)
+			public void Rectangle(ReadOnlySpan<Rectangle> rects)
 			{
-				Span<Rect> rects = stackalloc Rect[1];
-				rects[0] = (Rect)rect;
+				Span<Rect> xRects = stackalloc Rect[rects.Length];
+				for (int i = 0; i < rects.Length; i++)
+				{
+					xRects[i] = (Rect)rects[i];
+				}
 				if (SetColor(Brush))
 				{
 					_c.Request(new PolyFillRectangle
 					{
 						Drawable = _drawable,
 						GContext = _gc,
-					}, rects);
+					}, xRects);
 				}
 				if (SetColor(Pen))
 				{
@@ -442,13 +486,13 @@ namespace Amity
 						CoordinateMode = CoordinateMode.Origin,
 						Drawable = _drawable,
 						GContext = _gc,
-					}, rects);
+					}, xRects);
 				}
 			}
 
-			public void Text(Point position, string font, string text)
+			public void Text(Point position, string text)
 			{
-				if (SetColor(TextColor))
+				if (Font != null && SetColor(TextColor))
 				{
 					// TODO: Support newlines, wrapping etc.?
 					_c.Request(new ImageText16
@@ -482,21 +526,126 @@ namespace Amity
 			}
 		}
 
+		private class XScalableFont : IFontFamily
+		{
+			private Transport _c;
+			private XLFD[] _fonts;
+
+			public string Name => _fonts[0].FamilyName;
+
+			public ReadOnlySpan<int> FixedSizes => default;
+
+			public XScalableFont(Transport c, XLFD[] fonts)
+			{
+				_c = c;
+				_fonts = fonts;
+			}
+
+			public bool Scalable => true;
+
+			public IFont GetFont(float size, FontSlant slant, FontWeight weight)
+			{
+				return new XFont(_c, this, _fonts
+					.FirstOrDefault(f =>
+						f.Slant.ToString() == slant.ToString() &&
+						f.WeightName.Equals(weight.ToString(), StringComparison.OrdinalIgnoreCase)
+					));
+			}
+		}
+
+		private class XBitmapFont : IFontFamily
+		{
+			private Transport _c;
+			private XLFD[] _fonts;
+
+			public XBitmapFont(Transport c, XLFD[] fonts)
+			{
+				_c = c;
+				_fonts = fonts;
+				_fixedSizes = fonts
+					.Select(f => f.PixelSize)
+					.Where(p => p != 0)
+					.OrderBy(p => p)
+					.ToArray();
+			}
+
+			private int[] _fixedSizes = Array.Empty<int>();
+			public ReadOnlySpan<int> FixedSizes => _fixedSizes;
+			public string Name => _fonts[0].FamilyName;
+			public bool Scalable => false;
+			
+			private readonly Dictionary<XLFD, IFont> _cachedSizes
+				= new Dictionary<XLFD, IFont>();
+
+			// TODO: Normalize the pixel/point sizes
+			public IFont GetFont(float size, FontSlant slant, FontWeight weight)
+			{
+				if (size <= 0)
+				{
+					throw new ArgumentOutOfRangeException(nameof(size));
+				}
+				var iSize = (int)Math.Round(size);
+		
+				// Find the closest FixedSize
+				{
+					int i;
+					for (i = 0; i < (_fixedSizes.Length-1) && iSize >= _fixedSizes[i+1]; i++) { }
+					iSize = _fixedSizes[i];
+				}
+
+				// TODO: Scale bitmap fonts?
+				var fd = _fonts.First(f => XLFD.ParseSlant(f.Slant) == slant
+					&& XLFD.ParseWeight(f.WeightName) == weight && f.PixelSize == iSize);
+
+				if (!_cachedSizes.TryGetValue(fd, out var font))
+				{
+					_cachedSizes.Add(fd, font = new XFont(_c, this, fd));
+				}
+				return font;
+			}
+
+		}
+
 		private class XFont : IFont
 		{
-			public string Name => throw new NotImplementedException();
+			private Transport _c;
+			private XLFD _font;
+			private Font? _fontId;
+
+			public IFontFamily Family { get; }
+			public float Size => _font.PointSize / 10f;
+
+			public Font GetID()
+			{
+				if (!_fontId.HasValue)
+				{
+					_fontId = (Font)_c.ClaimID();
+					_c.Request(new OpenFont
+					{
+						FontID = _fontId.Value
+					}, _font.ToString());
+				}
+				return _fontId.Value;
+			}
+
+			public Rectangle MeasureText(string text)
+			{
+				throw new NotImplementedException();
+			}
+
+			public XFont(Transport c, IFontFamily family, XLFD font)
+			{
+				_c = c;
+				_font = font;
+				Family = family;
+			}
 
 			public void Dispose()
 			{
-
-			}
-
-			public XFont(Transport c, string name)
-			{
-				c.Request(new OpenFont
+				if (_fontId.HasValue)
 				{
-					FontID = c.ClaimID()
-				}, name);
+					// TODO: Free font here
+				}
 			}
 		}
 	}
