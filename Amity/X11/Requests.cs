@@ -840,7 +840,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 46;
 		private uint _unused;
-		public uint FontID;
+		public Font FontID;
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2, Size = 12)]
@@ -866,7 +866,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 47;
 		private uint _unused;
-		public uint FontID;
+		public Font FontID;
 
 		public struct ReplyData
 		{
@@ -918,7 +918,7 @@ namespace Amity.X11
 		private byte _opcode;
 		[MarshalAs(U1)] private bool OddLength;
 		private ushort _requestLength;
-		public uint Font;
+		public Font FontID;
 
 		public int GetMaxSize(in string data) =>
 			(data?.Length ?? 0) * sizeof(char);

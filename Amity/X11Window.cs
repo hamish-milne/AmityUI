@@ -630,9 +630,26 @@ namespace Amity
 			private Transport _c;
 			private XLFD _font;
 			private Font? _fontId;
+			private int _ascent, _descent;
 
 			public IFontFamily Family { get; }
 			public float Size => _font.PointSize / 10f;
+
+			public int Ascent
+			{
+				get {
+					GetID();
+					return _ascent;
+				}
+			}
+
+			public int Descent
+			{
+				get {
+					GetID();
+					return _descent;
+				}
+			}
 
 			public Font GetID()
 			{
@@ -643,13 +660,19 @@ namespace Amity
 					{
 						FontID = _fontId.Value
 					}, _font.ToString());
+					_c.Request(new QueryTextExtents { FontID = _fontId.Value },
+						"<test>", out QueryTextExtents.Reply reply);
+					_ascent = reply.FontAscent;
+					_descent = reply.FontDescent;
 				}
 				return _fontId.Value;
 			}
 
-			public Rectangle MeasureText(string text)
+			public (int left, int right) MeasureText(string text)
 			{
-				throw new NotImplementedException();
+				_c.Request(new QueryTextExtents { FontID = GetID() }, text,
+					out QueryTextExtents.Reply reply);
+				return (reply.OverallLeft, reply.OverallRight);
 			}
 
 			public XFont(Transport c, IFontFamily family, XLFD font)
@@ -663,7 +686,8 @@ namespace Amity
 			{
 				if (_fontId.HasValue)
 				{
-					// TODO: Free font here
+					_c.Request(new CloseFont { FontID = _fontId.Value });
+					_fontId = null;
 				}
 			}
 		}

@@ -54,7 +54,9 @@ namespace Amity
 	{
 		IFontFamily Family { get; }
 		float Size { get; }
-		Rectangle MeasureText(string text);
+		(int left, int right) MeasureText(string text);
+		int Ascent { get; }
+		int Descent { get; }
 	}
 
 	public enum ArcFillMode
