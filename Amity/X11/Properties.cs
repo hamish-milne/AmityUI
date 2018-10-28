@@ -6,14 +6,47 @@ namespace Amity.X11
 	using System.Runtime.CompilerServices;
 	using System.Runtime.InteropServices;
 
+	public static partial class Util
+	{
+		private static class Sizes<T>
+			where T : struct
+		{
+			public static readonly int Size =
+				typeof(T).IsEnum
+				? Marshal.SizeOf(typeof(T).GetEnumUnderlyingType())
+				: Marshal.SizeOf<T>();
+		}
+
+		public static int SizeOf<T>() where T : struct => Sizes<T>.Size;
+	}
+
 	public abstract class PropertiesBase
 	{
+		unsafe static PropertiesBase()
+		{
+			RegisterPropertyType<string>(
+				"STRING",
+				8,
+				str => Encoding.UTF8.GetMaxByteCount(str.Length),
+				data => {
+					fixed (byte* ptr = data)
+						return Encoding.UTF8.GetString(ptr, data.Length);
+				},
+				(value, data) => value.WriteOut(data)
+			);
+
+			RegisterPropertyType<Window>("WINDOW");
+			RegisterPropertyType<Atom>("ATOM");
+			RegisterPropertyType<uint>("CARDINAL");
+		}
+
 		public delegate int MaxSize<T>(T value);
 		public delegate T FromBytes<T>(ReadOnlySpan<byte> input);
 		public delegate int ToBytes<T>(T value, Span<byte> output);
 
 		private static class Converter<T>
 		{
+			public static int Format;
 			public static MaxSize<T> MaxSize;
 			public static FromBytes<T> FromBytes;
 			public static ToBytes<T> ToBytes;
@@ -21,10 +54,11 @@ namespace Amity.X11
 		}
 
 		protected static void RegisterPropertyType<T>(
-			string typeName, MaxSize<T> maxSize,
+			string typeName, int format, MaxSize<T> maxSize,
 			FromBytes<T> fromBytes, ToBytes<T> toBytes
 		)
 		{
+			Converter<T>.Format = format;
 			Converter<T>.TypeName = typeName;
 			Converter<T>.MaxSize = maxSize;
 			Converter<T>.FromBytes = fromBytes;
@@ -34,13 +68,14 @@ namespace Amity.X11
 		protected static void RegisterPropertyType<T>(string typeName)
 			where T : unmanaged
 		{
+			Converter<T>.Format = Util.SizeOf<T>();
 			Converter<T>.TypeName = typeName;
-			Converter<T>.MaxSize = Marshal.SizeOf<T>;
+			Converter<T>.MaxSize = _ => Util.SizeOf<T>();
 			Converter<T>.FromBytes = MemoryMarshal.Read<T>;
 			Converter<T>.ToBytes = (value, data) => 
 			{
 				MemoryMarshal.Write<T>(data, ref value);
-				return Marshal.SizeOf<T>();
+				return Util.SizeOf<T>();
 			};
 		}
 
@@ -72,10 +107,8 @@ namespace Amity.X11
 
 		private byte[] _buffer = new byte[65535];
 
-		public T GetProperty<T>([CallerMemberName] string name = null)
-		{
-			// TODO: Iterate over with bytes-after
-			_c.Request(new GetProperty
+		private GetProperty MakeGetRequest<T>(string name) =>
+			new GetProperty
 			{
 				Delete = false,
 				Window = _wId,
@@ -83,7 +116,23 @@ namespace Amity.X11
 				Type = GetAtom(Converter<T>.TypeName),
 				Offset = 0,
 				Length = (uint)_buffer.Length
-			}, out GetProperty.Reply reply, out Span<byte> replyData);
+			};
+		
+		private ChangeProperty MakeSetRequest<T>(string name) =>
+			new ChangeProperty
+			{
+				Window = _wId,
+				Property = GetAtom(name),
+				Type = GetAtom(Converter<T>.TypeName),
+				Format = (byte)Converter<T>.Format, // TODO: Change this?
+			};
+
+		public T GetProperty<T>([CallerMemberName] string name = null)
+		{
+			if (name == null) { throw new ArgumentNullException(nameof(name)); }
+			// TODO: Iterate over with bytes-after
+			_c.Request(MakeGetRequest<T>(name),
+				out GetProperty.Reply reply, out Span<byte> replyData);
 			if (reply.Format == 0)
 			{
 				return default(T);
@@ -97,38 +146,44 @@ namespace Amity.X11
 
 		public void SetProperty<T>(T value, [CallerMemberName] string name = null)
 		{
-			var len = Converter<T>.ToBytes(value, _buffer.AsSpan());
-			_c.Request(new ChangeProperty
+			if (name == null) { throw new ArgumentNullException(nameof(name)); }
+			var len = Converter<T>.ToBytes(value, _buffer);
+			_c.Request(MakeSetRequest<T>(name), _buffer.AsMemory(0, len));
+		}
+
+		public Span<T> GetSpan<T>([CallerMemberName] string name = null)
+			where T : unmanaged
+		{
+			if (name == null) { throw new ArgumentNullException(nameof(name)); }
+			// TODO: Iterate over with bytes-after
+			_c.Request(MakeGetRequest<T>(name),
+				out GetProperty.Reply reply, out Span<byte> replyData);
+			if (reply.Format == 0)
 			{
-				Window = _wId,
-				Property = GetAtom(name),
-				Type = GetAtom(Converter<T>.TypeName),
-				Format = 8, // TODO: Change this?
-			}, _buffer.AsMemory(0, len));
+				return default(Span<T>);
+			}
+			return MemoryMarshal.Cast<byte, T>(replyData);
+		}
+
+		public void SetSpan<T>(Span<T> value, [CallerMemberName] string name = null)
+			where T : unmanaged
+		{
+			if (name == null) { throw new ArgumentNullException(nameof(name)); }
+			var src = MemoryMarshal.AsBytes(value);
+			src.CopyTo(_buffer);
+			_c.Request(MakeSetRequest<T>(name), _buffer.AsMemory(0, src.Length));
 		}
 	}
 
-	public class ICCMProperties : PropertiesBase
+	public class ICCCM : PropertiesBase
 	{
-		public ICCMProperties(Transport c, Window wId) : base(c, wId) { }
+		public ICCCM(Transport c, Window wId) : base(c, wId) { }
 
-		unsafe static ICCMProperties()
+		unsafe static ICCCM()
 		{
-			RegisterPropertyType<string>(
-				"UTF8_STRING",
-				str => Encoding.UTF8.GetMaxByteCount(str.Length),
-				data => {
-					fixed (byte* ptr = data)
-						return Encoding.UTF8.GetString(ptr, data.Length);
-				},
-				(value, data) => value.WriteOut(data)
-			);
-
-			RegisterPropertyType<Window>("WINDOW");
-			RegisterPropertyType<Atom>("ATOM");
+			RegisterPropertyType<WmHints>("WM_HINTS");
 			RegisterPropertyType<IconSize>("WM_ICON_SIZE");
 			RegisterPropertyType<WmState>("WM_STATE");
-			RegisterPropertyType<uint>("CARDINAL");
 		}
 
 		public string WM_CLASS
@@ -153,6 +208,49 @@ namespace Amity.X11
 		{
 			get => GetProperty<string>();
 			set => SetProperty(value);
+		}
+
+		public WmHints WM_HINTS
+		{
+			get => GetProperty<WmHints>();
+			set => SetProperty(value);
+		}
+
+		public Window WM_TRANSIENT_FOR
+		{
+			get => GetProperty<Window>();
+			set => SetProperty(value);
+		}
+
+		public Span<Atom> WM_PROTOCOLS
+		{
+			get => GetSpan<Atom>();
+			set => SetSpan(value);
+		}
+
+		public Span<Window> WM_COLORMAP_WINDOWS
+		{
+			get => GetSpan<Window>();
+			set => SetSpan(value);
+		}
+
+		public WmState WM_STATE
+		{
+			get => GetProperty<WmState>();
+			set => SetProperty(value);
+		}
+
+		public IconSize WM_ICON_SIZE
+		{
+			get => GetProperty<IconSize>();
+			set => SetProperty(value);
+		}
+	}
+
+	public class NetWM : PropertiesBase
+	{
+		public NetWM(Transport c, Window wId) : base(c, wId)
+		{
 		}
 
 		public string _NET_WM_NAME

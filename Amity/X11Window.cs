@@ -167,7 +167,7 @@ namespace Amity
 					//| X11.Event.PropertyChange,
 				BackgroundPixel = 0xFFFFFFFF,
 			});
-			var props = new ICCMProperties(c, _wId);
+			var props = new ICCCM(c, _wId);
 			props.WM_NAME = "💖 My window! 💖";
 		}
 
