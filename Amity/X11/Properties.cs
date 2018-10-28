@@ -53,17 +53,14 @@ namespace Amity.X11
 			_wId = wId;
 		}
 
-		private readonly Dictionary<string, uint> _atoms
-			= new Dictionary<string, uint>();
+		private readonly Dictionary<string, Atom> _atoms
+			= new Dictionary<string, Atom>();
 		
-		private uint GetAtom(string str)
+		private Atom GetAtom(string str)
 		{
 			if (!_atoms.TryGetValue(str, out var atom))
 			{
-				_c.Request(new InternAtom
-				{
-					OnlyIfExists = true, // TODO: Allow this to be false?
-				}, str, out InternAtom.Reply reply);
+				_c.Request(new InternAtom { }, str, out InternAtom.Reply reply);
 				_atoms.Add(str, atom = reply.Atom);
 				if (atom == 0)
 				{
@@ -89,7 +86,7 @@ namespace Amity.X11
 			}, out GetProperty.Reply reply, out Span<byte> replyData);
 			if (reply.Format == 0)
 			{
-				throw new Exception($"Property {name} doesn't exist");
+				return default(T);
 			}
 			if (reply.BytesAfter > 0)
 			{
@@ -127,6 +124,11 @@ namespace Amity.X11
 				(value, data) => value.WriteOut(data)
 			);
 
+			RegisterPropertyType<Window>("WINDOW");
+			RegisterPropertyType<Atom>("ATOM");
+			RegisterPropertyType<IconSize>("WM_ICON_SIZE");
+			RegisterPropertyType<WmState>("WM_STATE");
+			RegisterPropertyType<uint>("CARDINAL");
 		}
 
 		public string WM_CLASS
@@ -150,6 +152,36 @@ namespace Amity.X11
 		public string WM_CLIENT_MACHINE
 		{
 			get => GetProperty<string>();
+			set => SetProperty(value);
+		}
+
+		public string _NET_WM_NAME
+		{
+			get => GetProperty<string>();
+			set => SetProperty(value);
+		}
+
+		public string _NET_WM_VISIBLE_NAME
+		{
+			get => GetProperty<string>();
+			set => SetProperty(value);
+		}
+
+		public string _NET_WM_ICON_NAME
+		{
+			get => GetProperty<string>();
+			set => SetProperty(value);
+		}
+
+		public string _NET_WM_VISIBLE_ICON_NAME
+		{
+			get => GetProperty<string>();
+			set => SetProperty(value);
+		}
+
+		public uint _NET_WM_DESKTOP
+		{
+			get => GetProperty<uint>();
 			set => SetProperty(value);
 		}
 	}

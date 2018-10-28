@@ -243,8 +243,9 @@ namespace Amity.X11
 			Send(true);
 			reply = ReadReply<TReply>(out var length);
 			Grow(ref _rBuffer, length, false);
-			_socket.Receive(_rBuffer, 0, SocketFlags.None);
-			replyData = MemoryMarshal.Cast<byte, TReplyData>(_rBuffer);
+			if (length > 0)
+				_socket.Receive(_rBuffer, length, SocketFlags.None);
+			replyData = MemoryMarshal.Cast<byte, TReplyData>(_rBuffer.AsSpan(0, length));
 		}
 		
 		public void Request<T, TData, TReply>(in T data, TData extra, out TReply reply)

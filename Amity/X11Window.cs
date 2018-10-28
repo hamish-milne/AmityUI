@@ -9,6 +9,8 @@ namespace Amity
 	using Point = System.Drawing.Point;
 	using System.Collections.Generic;
 
+	using System.Runtime.InteropServices;
+
 	// From https://www.x.org/docs/XProtocol/proto.pdf
 
 	public class X11Window : IWindow
@@ -48,15 +50,20 @@ namespace Amity
 			return true;
 		}
 
+		private Point _mousePosition;
+
 		public Point MousePosition
 		{
-			get => throw new NotImplementedException();
+			get => _mousePosition;
 			set => throw new NotImplementedException();
 		}
 
 		public Rectangle WindowArea
 		{
-			get => throw new NotImplementedException();
+			get
+			{
+				return _cachedRect;
+			}
 			set => throw new NotImplementedException();
 		}
 
@@ -157,10 +164,11 @@ namespace Amity
 					| X11.Event.StructureNotify
 					| X11.Event.Exposure
 					| X11.Event.VisibilityChange,
+					//| X11.Event.PropertyChange,
 				BackgroundPixel = 0xFFFFFFFF,
 			});
 			var props = new ICCMProperties(c, _wId);
-			props.WM_NAME = "My window!";
+			props.WM_NAME = "💖 My window! 💖";
 		}
 
 		private void HandleExpose(X11.Expose e)
@@ -180,6 +188,11 @@ namespace Amity
 
 		private void HandleResize(X11.ResizeRequestEvent e)
 		{
+			if (_cachedRect.Width == e.Width && _cachedRect.Height == e.Height)
+			{
+				// TODO: Window move event
+				return;
+			}
 			_cachedRect.Width = e.Width;
 			_cachedRect.Height = e.Height;
 			Resize?.Invoke();
@@ -187,13 +200,19 @@ namespace Amity
 
 		private void HandleResize(X11.ConfigureNotify e)
 		{
+			if (_cachedRect.Width == e.Rect.Width && _cachedRect.Height == e.Rect.Height)
+			{
+				// TODO: Window move event
+				return;
+			}
 			_cachedRect = e.Rect;
 			Resize?.Invoke();
 		}
 
 		private void HandleMouseMove(X11.MotionNotify e)
 		{
-			MouseMove?.Invoke(new Point(e.Data.EventX, e.Data.EventY));
+			_mousePosition = new Point(e.Data.EventX, e.Data.EventY);
+			MouseMove?.Invoke(_mousePosition);
 		}
 
 		private static X11.Screen _screen;
@@ -211,7 +230,7 @@ namespace Amity
 			}
 		}
 
-		public void Run()
+		public unsafe void Run()
 		{
 			_connection.MessageLoop();
 		}
@@ -283,7 +302,7 @@ namespace Amity
 					Drawable = _drawable = (Drawable)window,
 					ContextID = _gc = (GContext)c.ClaimID()
 				},
-				new GCValues { Foreground = (Color32)_cachedForeground });
+				new GCValues { Foreground = (Color32)_cachedForeground, GraphicsExposures = false });
 				_isWindow = true;
 			}
 
@@ -303,7 +322,7 @@ namespace Amity
 					Drawable = _drawable,
 					ContextID = _gc = (GContext)c.ClaimID()
 				},
-				new GCValues { Foreground = (Color32)_cachedForeground });
+				new GCValues { Foreground = (Color32)_cachedForeground, GraphicsExposures = false });
 			}
 
 			private bool SetColor(Color? color)

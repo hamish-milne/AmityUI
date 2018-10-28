@@ -597,7 +597,7 @@ namespace Amity.X11
 			private ushort _unused;
 			public ushort SequenceNumber;
 			private uint _replyLength;
-			public uint Atom;
+			public Atom Atom;
 		}
 	}
 
@@ -606,7 +606,7 @@ namespace Amity.X11
 	{
 		public byte Opcode => 17;
 		private uint _unused;
-		public uint Atom;
+		public Atom Atom;
 
 		[StructLayout(LayoutKind.Sequential, Pack = 2, Size = 32)]
 		public struct Reply : X11Reply<string>
@@ -635,8 +635,8 @@ namespace Amity.X11
 		public PropertyMode Mode;
 		private ushort _requestLength;
 		public Window Window;
-		public uint Property;
-		public uint Type;
+		public Atom Property;
+		public Atom Type;
 		public byte Format;
 		private ushort _unused;
 		
@@ -677,8 +677,8 @@ namespace Amity.X11
 		[MarshalAs(U1)] public bool Delete;
 		private ushort _requestLength;
 		public Window Window;
-		public uint Property;
-		public uint Type;
+		public Atom Property;
+		public Atom Type;
 		public uint Offset;
 		public uint Length;
 
@@ -689,7 +689,7 @@ namespace Amity.X11
 			public byte Format;
 			public ushort SequenceNumber;
 			private uint _replyLength;
-			public uint Type;
+			public Atom Type;
 			public uint BytesAfter;
 			public uint ValueLength;
 		}

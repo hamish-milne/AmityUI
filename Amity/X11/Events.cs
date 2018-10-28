@@ -41,6 +41,7 @@ namespace Amity.X11
 		{
 			Span<byte> data = stackalloc byte[32];
 			MemoryMarshal.Write(data, ref obj);
+			data[0] = obj.Opcodes[0];
 			return MemoryMarshal.Read<X11AbstractEvent>(data);
 		}
 	}
@@ -433,15 +434,16 @@ namespace Amity.X11
 		[MarshalAs(UnmanagedType.U1)] public bool IsInstalled;
 	}
 
-	[StructLayout(LayoutKind.Sequential, Pack = 2, Size = 32)]
-	public struct ClientMessage : X11Event
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public unsafe struct ClientMessage : X11Event
 	{
 		public byte[] Opcodes => new byte[]{33};
 		private byte _opcode;
 		public byte Format;
 		public ushort SequenceNumber;
-		public uint Window;
-		public uint Type;
+		public Window Window;
+		public Atom Type;
+		public fixed byte Data[20];
 	}
 
 	public enum MappingType : byte

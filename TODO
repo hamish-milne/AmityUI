@@ -1,7 +1,7 @@
 Cross-platform:
 	✔ Basic events @done(18-09-28 17:35)
 	✔ Automatic backend creation @done(18-09-28 17:35)
-	☐ Manual backend registering (for AOT)
+	✔ Manual backend registering (for AOT) @done(18-10-27 23:23)
 	✔ Update regions @done(18-09-30 23:14)
 	☐ Style options
 	☐ Device context handle (for OpenGL etc.) 
@@ -33,6 +33,7 @@ XServer:
 		☐ https://www.x.org/releases/X11R7.7/doc/fixesproto/fixesproto.txt
 		☐ https://www.x.org/releases/current/doc/renderproto/renderproto.txt
 		☐ XEVIE
+		☐ XRANDR (for DPI)
 
 
 Quartz:
