@@ -2,7 +2,6 @@ namespace Amity.X11
 {
 	using System;
 	using System.Text;
-	using System.Collections.Generic;
 	using System.Runtime.CompilerServices;
 	using System.Runtime.InteropServices;
 
@@ -68,7 +67,7 @@ namespace Amity.X11
 		protected static void RegisterPropertyType<T>(string typeName)
 			where T : unmanaged
 		{
-			Converter<T>.Format = Util.SizeOf<T>();
+			Converter<T>.Format = Math.Min(32, Util.SizeOf<T>() * 8);
 			Converter<T>.TypeName = typeName;
 			Converter<T>.MaxSize = _ => Util.SizeOf<T>();
 			Converter<T>.FromBytes = MemoryMarshal.Read<T>;
@@ -88,44 +87,41 @@ namespace Amity.X11
 			_wId = wId;
 		}
 
-		private readonly Dictionary<string, Atom> _atoms
-			= new Dictionary<string, Atom>();
-		
-		private Atom GetAtom(string str)
-		{
-			if (!_atoms.TryGetValue(str, out var atom))
-			{
-				_c.Request(new InternAtom { }, str, out InternAtom.Reply reply);
-				_atoms.Add(str, atom = reply.Atom);
-				if (atom == 0)
-				{
-					throw new Exception($"The atom {str} doesn't exist!");
-				}
-			}
-			return atom;
-		}
-
 		private byte[] _buffer = new byte[65535];
 
-		private GetProperty MakeGetRequest<T>(string name) =>
-			new GetProperty
+		private GetProperty MakeGetRequest<T>(string name)
+		{
+			if (Converter<T>.Format == 0)
+			{
+				throw new NotSupportedException(
+					$"Property type {typeof(T)} not registered");
+			}
+			return new GetProperty
 			{
 				Delete = false,
 				Window = _wId,
-				Property = GetAtom(name),
-				Type = GetAtom(Converter<T>.TypeName),
+				Property = _c.GetAtom(name),
+				Type = _c.GetAtom(Converter<T>.TypeName),
 				Offset = 0,
 				Length = (uint)_buffer.Length
 			};
+		}
 		
-		private ChangeProperty MakeSetRequest<T>(string name) =>
-			new ChangeProperty
+		private ChangeProperty MakeSetRequest<T>(string name)
+		{
+			if (Converter<T>.Format == 0)
+			{
+				throw new NotSupportedException(
+					$"Property type {typeof(T)} not registered");
+			}
+			return new ChangeProperty
 			{
 				Window = _wId,
-				Property = GetAtom(name),
-				Type = GetAtom(Converter<T>.TypeName),
+				Property = _c.GetAtom(name),
+				Type = _c.GetAtom(Converter<T>.TypeName),
 				Format = (byte)Converter<T>.Format, // TODO: Change this?
 			};
+		}
 
 		public T GetProperty<T>([CallerMemberName] string name = null)
 		{
@@ -175,14 +171,16 @@ namespace Amity.X11
 		}
 	}
 
-	public class ICCCM : PropertiesBase
+	public class WmClient : PropertiesBase
 	{
-		public ICCCM(Transport c, Window wId) : base(c, wId) { }
+		public WmClient(Transport c, Window wId) : base(c, wId) { }
 
-		unsafe static ICCCM()
+		static WmClient()
 		{
 			RegisterPropertyType<WmHints>("WM_HINTS");
 			RegisterPropertyType<IconSize>("WM_ICON_SIZE");
+			RegisterPropertyType<WmState>("WM_STATE");
+			RegisterPropertyType<WmSizeHints>("WM_SIZE_HINTS");
 			RegisterPropertyType<WmState>("WM_STATE");
 		}
 
@@ -216,6 +214,12 @@ namespace Amity.X11
 			set => SetProperty(value);
 		}
 
+		public WmSizeHints WM_NORMAL_HINTS
+		{
+			get => GetProperty<WmSizeHints>();
+			set => SetProperty(value);
+		}
+
 		public Window WM_TRANSIENT_FOR
 		{
 			get => GetProperty<Window>();
@@ -239,6 +243,16 @@ namespace Amity.X11
 			get => GetProperty<WmState>();
 			set => SetProperty(value);
 		}
+	}
+
+	public class WmRoot : PropertiesBase
+	{
+		public WmRoot(Transport c, Window wId) : base(c, wId) { }
+
+		static WmRoot()
+		{
+			RegisterPropertyType<IconSize>("WM_ICON_SIZE");
+		}
 
 		public IconSize WM_ICON_SIZE
 		{
@@ -251,6 +265,30 @@ namespace Amity.X11
 	{
 		public NetWM(Transport c, Window wId) : base(c, wId)
 		{
+		}
+
+		public Span<Atom> _NET_SUPPORTED
+		{
+			get => GetSpan<Atom>();
+			set => SetSpan(value);
+		}
+
+		public Span<Window> _NET_CLIENT_LIST
+		{
+			get => GetSpan<Window>();
+			set => SetSpan(value);
+		}
+
+		public Span<Window> _NET_CLIENT_LIST_STACKING
+		{
+			get => GetSpan<Window>();
+			set => SetSpan(value);
+		}
+
+		public uint _NET_NUMBER_OF_DESKTOPS
+		{
+			get => GetProperty<uint>();
+			set => SetProperty(value);
 		}
 
 		public string _NET_WM_NAME

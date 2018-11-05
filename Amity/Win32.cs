@@ -213,6 +213,8 @@ namespace Amity
 			}
 		}
 
+		public IDrawingContext Icon => throw new NotImplementedException();
+
 		public void Run()
 		{
 			while (GetMessage(out var msg, _hwnd, 0, 0) != 0)
@@ -458,6 +460,12 @@ namespace Amity
 		}
 
 		public IFont LoadFont(string name) => throw new NotImplementedException();
+
+		public void FlushIcon()
+		{
+			throw new NotImplementedException();
+		}
+
 
 #region pinvoke
 

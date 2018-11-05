@@ -44,6 +44,7 @@ namespace Amity
             
             window.Draw += () =>
             {
+                if (buffer == null) { return; }
                 // image.Mutate(a => a.DrawText("ImageSharp",
                 // new Font(SystemFonts.Families.First(f => f.Name == "Calibri"),
                 //     24, FontStyle.Regular),
@@ -58,14 +59,14 @@ namespace Amity
                     buffer.Pen = Color.Red;
                     buffer.Brush = Color.CadetBlue;
                     buffer.TextColor = Color.Aquamarine;
-                    buffer.ArcFillMode = ArcFillMode.Chord;
+                    buffer.ArcFillMode = ArcFillMode.Slice;
                     buffer.Font = window.Font("lucida").GetFont(15, FontSlant.Roman, FontWeight.Bold);
                     buffer.Rectangle(new Rectangle(10, 60, 70, 40));
                     buffer.Line(new Point(0, 0), new Point(200, 300));
                     buffer.Text(new Point(0, 25), "Α α, Β β, Γ γ, Δ δ, Ε ε, Ζ ζ, Η η, Θ θ, Ι ι, Κ κ, Λ λ, Μ μ, Ν ν, Ξ ξ, Ο ο, Π π, Ρ ρ, Σ σ/ς, Τ τ, Υ υ, Φ φ, Χ χ, Ψ ψ, and Ω ω.");
                     buffer.Text(new Point(0, 50), "ASCII: ABCDabcd1234:@~?><!\"£$%^&*()\\ ミクがかわいい ¿No lo es? 💖 내가 어느 것을 더 좋아하는지 확실하지 않다. ");
                     buffer.Line(new Point(0, 50), new Point(100, 50));
-                    buffer.Arc(new Rectangle(100, 100, 200, 100), 0, 200);
+                    buffer.Arc(new Rectangle(100, 100, 200, 100), 0, 270);
 
                     buffer.Polygon(new []{
                         new Point(200, 200),
@@ -133,6 +134,16 @@ namespace Amity
                 //window.Invalidate();
             };
             window.IsVisible = true;
+
+            window.Icon.Pen = null;
+            window.Icon.Brush = Color.Empty;
+            window.Icon.Rectangle(new Rectangle(0, 0, 48, 48));
+            window.Icon.Pen = Color.Red;
+            window.Icon.Brush = Color.Teal;
+            window.Icon.ArcFillMode = ArcFillMode.Slice;
+            window.Icon.Arc(new Rectangle(0, 0, 48, 48), 0, 270);
+            window.FlushIcon();
+
             window.Run();
         }
     }

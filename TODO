@@ -6,6 +6,8 @@ Cross-platform:
 	☐ Style options
 	☐ Device context handle (for OpenGL etc.) 
 	✔ Drawing contexts @done(18-09-30 23:14)
+	✔ Icons @done(18-11-05 23:40)
+	☐ Text alignment
 
 Win32:
 	✔ Window creation @done(18-09-28 17:35)
@@ -16,6 +18,8 @@ Win32:
 	☐ Layered windows 
 	✔ Drawing contexts with GDI @done(18-10-13 22:49)
 	✔ Mouse and button events @done(18-10-13 22:49)
+	☐ Icons
+	☐ Text alignment
 
 XServer:
 	✔ Window creation @done(18-09-30 23:13)
@@ -23,6 +27,9 @@ XServer:
 	✔ Drawing context @done(18-10-13 22:49)
 	✔ Bitmap painting @done(18-10-13 22:49)
 	✔ Mouse and button events @done(18-10-13 22:49)
+	✔ WM icons @done(18-11-05 23:39)
+	☐ NetWM icons
+	☐ Text alignment
 	Extensions (https://www.x.org/docs/Xext/):
 		☐ SHAPE
 		☐ BIG-REQUESTS

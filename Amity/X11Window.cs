@@ -9,8 +9,6 @@ namespace Amity
 	using Point = System.Drawing.Point;
 	using System.Collections.Generic;
 
-	using System.Runtime.InteropServices;
-
 	// From https://www.x.org/docs/XProtocol/proto.pdf
 
 	public class X11Window : IWindow
@@ -87,6 +85,50 @@ namespace Amity
 					Width = (ushort)value.Width,
 					Height = (ushort)value.Height
 				});
+			}
+		}
+
+		public WmClient WmClient { get; }
+		public WmRoot WmRoot { get; }
+		public NetWM NetWM { get; }
+
+		private DrawingContext _icon;
+		private DrawingContext _iconMask;
+
+		public IDrawingContext Icon
+		{
+			get
+			{
+				if (_icon == null || _icon.IsDisposed)
+				{
+					_icon?.Dispose();
+					_iconMask?.Dispose();
+					
+					var iconSize = WmRoot.WM_ICON_SIZE;
+					_icon = new DrawingContext(_connection,
+						new Size((int)iconSize.MaxWidth, (int)iconSize.MaxHeight),
+						_screen.Root, 32);
+					_iconMask =
+						new DrawingContext(_connection, _icon.Size, _screen.Root, 1);
+				}
+				return _icon;
+			}
+		}
+
+		public void FlushIcon()
+		{
+			if (_icon?.IsDisposed == false)
+			{
+				_icon.CopyPlane(0x80_00_00_00,
+					new Rectangle(new Point(0, 0), _icon.Size),
+					new Point(0, 0), _iconMask);
+				// TODO: Also set NetWM icons here
+				WmClient.WM_HINTS = new WmHints // TODO: Use Append here
+				{
+					Flags = HintFlags.IconPixmap | HintFlags.IconMask,
+					IconPixmap = (Pixmap)_icon.Drawable,
+					IconMask = (Pixmap)_iconMask.Drawable
+				};
 			}
 		}
 
@@ -167,8 +209,10 @@ namespace Amity
 					//| X11.Event.PropertyChange,
 				BackgroundPixel = 0xFFFFFFFF,
 			});
-			var props = new ICCCM(c, _wId);
-			props.WM_NAME = "💖 My window! 💖";
+			WmClient = new WmClient(c, _wId);
+			WmRoot = new WmRoot(c, _screen.Root);
+			NetWM = new NetWM(c, _wId);
+			WmClient.WM_NAME = "💖 My window! 💖";
 		}
 
 		private void HandleExpose(X11.Expose e)
@@ -256,6 +300,7 @@ namespace Amity
 			public Color? Brush { get; set; }
 			public Color? Pen { get; set; }
 			public Color? TextColor { get; set; }
+			public Size Size { get; }
 
 			private IFont _font;
 			public IFont Font
@@ -292,6 +337,7 @@ namespace Amity
 			private X11.Transport _c;
 			private GContext _gc;
 			private Drawable _drawable;
+			public Drawable Drawable => _drawable;
 			private bool _isWindow;
 
 			public DrawingContext(X11.Transport c, Window window)
@@ -302,17 +348,18 @@ namespace Amity
 					Drawable = _drawable = (Drawable)window,
 					ContextID = _gc = (GContext)c.ClaimID()
 				},
-				new GCValues { Foreground = (Color32)_cachedForeground, GraphicsExposures = false });
+				new GCValues { Foreground = (Color32)_cachedForeground, GraphicsExposures = false, Background = (Color32)Color.Empty });
 				_isWindow = true;
 			}
 
-			public DrawingContext(X11.Transport c, Size size, Window window)
+			public DrawingContext(X11.Transport c, Size size, Window window, byte depth = 24)
 			{
+				Size = size;
 				_c = c;
 				_c.Request(new CreatePixmap
 				{
 					Drawable = (Drawable)window,
-					Depth = 24,
+					Depth = depth,
 					Width = (ushort)size.Width,
 					Height = (ushort)size.Height,
 					PixmapID = (Pixmap)(_drawable = (Drawable)c.ClaimID())
@@ -322,10 +369,10 @@ namespace Amity
 					Drawable = _drawable,
 					ContextID = _gc = (GContext)c.ClaimID()
 				},
-				new GCValues { Foreground = (Color32)_cachedForeground, GraphicsExposures = false });
+				new GCValues { Foreground = (Color32)_cachedForeground, GraphicsExposures = false, Background = (Color32)Color.Empty });
 			}
 
-			private bool SetColor(Color? color)
+			public bool SetColor(Color? color)
 			{
 				if (!color.HasValue) { return false; }
 				if (_cachedForeground != color)
@@ -337,7 +384,7 @@ namespace Amity
 					}, new GCValues
 					{
 						Foreground = (Color32)_cachedForeground,
-						Background = (Color32)Color.Black // TODO: use this properly
+						Background = (Color32)Color.Empty // TODO: use this properly
 					});
 				}
 				return true;
@@ -411,6 +458,8 @@ namespace Amity
 				}
 			}
 
+			public bool IsDisposed => _gc == 0;
+
 			public void Dispose()
 			{
 				_c.Request(new FreeGC
@@ -418,6 +467,7 @@ namespace Amity
 					GContext = _gc
 				});
 				_c.ReleaseID((uint)_gc);
+				_gc = 0;
 				if (!_isWindow)
 				{
 					_c.Request(new FreePixmap
@@ -425,6 +475,7 @@ namespace Amity
 						Pixmap = (Pixmap)_drawable
 					});
 					_c.ReleaseID((uint)_drawable);
+					_drawable = 0;
 				}
 			}
 
@@ -541,6 +592,25 @@ namespace Amity
 					},
 					SrcX = (short)srcRect.X,
 					SrcY = (short)srcRect.Y
+				});
+			}
+
+			public void CopyPlane(uint mask, Rectangle srcRect, Point dstPos, DrawingContext dst)
+			{
+				_c.Request(new CopyPlane
+				{
+					SrcDrawable = _drawable,
+					DstDrawable = dst._drawable,
+					GContext = dst._gc,
+					Dst = new Rect {
+						X = (short)dstPos.X,
+						Y = (short)dstPos.Y,
+						Width = (ushort)srcRect.Width,
+						Height = (ushort)srcRect.Height
+					},
+					SrcX = (short)srcRect.X,
+					SrcY = (short)srcRect.Y,
+					BitPlane = mask
 				});
 			}
 		}

@@ -21,6 +21,8 @@ namespace Amity
 		IDrawingContext CreateBitmap(Size size);
 		void Invalidate();
 		ReadOnlySpan<IFontFamily> Fonts { get; }
+		IDrawingContext Icon { get; }
+		void FlushIcon();
 	}
 
 	public enum FontSlant

@@ -76,6 +76,14 @@ namespace Amity
 			=> _api.CreateBitmap(size);
 		
 		public void Invalidate() => _api.Invalidate();
+
+		public void FlushIcon()
+		{
+			_api.FlushIcon();
+		}
+
 		public ReadOnlySpan<IFontFamily> Fonts => _api.Fonts;
+
+		public IDrawingContext Icon => _api.Icon;
 	}
 }

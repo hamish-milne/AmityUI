@@ -1250,6 +1250,20 @@ namespace Amity.X11
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 2)]
+	public struct CopyPlane : X11Request
+	{
+		public byte Opcode => 63;
+		private uint _unused;
+		public Drawable SrcDrawable;
+		public Drawable DstDrawable;
+		public GContext GContext;
+		public short SrcX;
+		public short SrcY;
+		public Rect Dst;
+		public uint BitPlane;
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 2)]
 	public struct Point
 	{
 		public ushort X;

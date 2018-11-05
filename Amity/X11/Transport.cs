@@ -221,6 +221,7 @@ namespace Amity.X11
 			_wBuffer[0] = data.Opcode;
 			Send(true);
 			reply = ReadReply<TReply>(out var _);
+			CommitEvents();
 		}
 
 		public void Request<T, TReply, TReplyData>(in T data, out TReply reply, out TReplyData replyData)
@@ -231,6 +232,7 @@ namespace Amity.X11
 			_wBuffer[0] = data.Opcode;
 			Send(true);
 			(reply, replyData) = ReadReply<TReply, TReplyData>();
+			CommitEvents();
 		}
 
 		public void Request<T, TReply, TReplyData>(in T data, out TReply reply, out Span<TReplyData> replyData)
@@ -246,6 +248,7 @@ namespace Amity.X11
 			if (length > 0)
 				_socket.Receive(_rBuffer, length, SocketFlags.None);
 			replyData = MemoryMarshal.Cast<byte, TReplyData>(_rBuffer.AsSpan(0, length));
+			CommitEvents();
 		}
 		
 		public void Request<T, TData, TReply>(in T data, TData extra, out TReply reply)
@@ -257,6 +260,7 @@ namespace Amity.X11
 			WriteIndirect(data, extra);
 			Send(true);
 			reply = ReadReply<TReply>(out var _);
+			CommitEvents();
 		}
 		
 		public void Request<T, TData, TReply, TReplyData>(
@@ -269,6 +273,7 @@ namespace Amity.X11
 			WriteIndirect(data, extra);
 			Send(true);
 			(reply, replyData) = ReadReply<TReply, TReplyData>();
+			CommitEvents();
 		}
 		
 		public void Dispose()
@@ -337,7 +342,6 @@ namespace Amity.X11
 				_socket.Receive(buf);
 				if (buf[0] == 1)
 				{
-					CommitEvents();
 					replyLength = MemoryMarshal.Cast<byte, int>(buf)[1] * sizeof(uint);
 					replyLength -= (buf.Length - _msgBuffer.Length) / sizeof(uint);
 					return MemoryMarshal.Read<T>(buf);
@@ -432,6 +436,89 @@ namespace Amity.X11
 		public void ReleaseID(uint id)
 		{
 			_ids.Remove(id);
+		}
+
+		private readonly Dictionary<string, uint> _atoms =
+			new Dictionary<string, uint>
+		{
+			{"PRIMARY",              1},
+			{"SECONDARY",            2},
+			{"ARC",                  3},
+			{"ATOM",                 4},
+			{"BITMAP",               5},
+			{"CARDINAL",             6},
+			{"COLORMAP",             7},
+			{"CURSOR",               8},
+			{"CUT_BUFFER0",          9},
+			{"CUT_BUFFER1",          10},
+			{"CUT_BUFFER2",          11},
+			{"CUT_BUFFER3",          12},
+			{"CUT_BUFFER4",          13},
+			{"CUT_BUFFER5",          14},
+			{"CUT_BUFFER6",          15},
+			{"CUT_BUFFER7",          16},
+			{"DRAWABLE",             17},
+			{"FONT",                 18},
+			{"INTEGER",              19},
+			{"PIXMAP",               20},
+			{"POINT",                21},
+			{"RECTANGLE",            22},
+			{"RESOURCE_MANAGER",     23},
+			{"RGB_COLOR_MAP",        24},
+			{"RGB_BEST_MAP",         25},
+			{"RGB_BLUE_MAP",         26},
+			{"RGB_DEFAULT_MAP",      27},
+			{"RGB_GRAY_MAP",         28},
+			{"RGB_GREEN_MAP",        29},
+			{"RGB_RED_MAP",          30},
+			{"STRING",               31},
+			{"VISUALID",             32},
+			{"WINDOW",               33},
+			{"WM_COMMAND",           34},
+			{"WM_HINTS",             35},
+			{"WM_CLIENT_MACHINE",    36},
+			{"WM_ICON_NAME",         37},
+			{"WM_ICON_SIZE",         38},
+			{"WM_NAME",              39},
+			{"WM_NORMAL_HINTS",      40},
+			{"WM_SIZE_HINTS",        41},
+			{"WM_ZOOM_HINTS",        42},
+			{"MIN_SPACE",            43},
+			{"NORM_SPACE",           44},
+			{"MAX_SPACE",            45},
+			{"END_SPACE",            46},
+			{"SUPERSCRIPT_X",        47},
+			{"SUPERSCRIPT_Y",        48},
+			{"SUBSCRIPT_X",          49},
+			{"SUBSCRIPT_Y",          50},
+			{"UNDERLINE_POSITION",   51},
+			{"UNDERLINE_THICKNESS",  52},
+			{"STRIKEOUT_ASCENT",     53},
+			{"STRIKEOUT_DESCENT",    54},
+			{"ITALIC_ANGLE",         55},
+			{"X_HEIGHT",             56},
+			{"QUAD_WIDTH",           57},
+			{"WEIGHT",               58},
+			{"POINT_SIZE",           59},
+			{"RESOLUTION",           60},
+			{"COPYRIGHT",            61},
+			{"NOTICE",               62},
+			{"FONT_NAME",            63},
+			{"FAMILY_NAME",          64},
+			{"FULL_NAME",            65},
+			{"CAP_HEIGHT",           66},
+			{"WM_CLASS",             67},
+			{"WM_TRANSIENT_FOR",     68}
+		};
+
+		public Atom GetAtom(string name)
+		{
+			if (!_atoms.TryGetValue(name, out var ret))
+			{
+				Request(new InternAtom { }, name, out InternAtom.Reply reply);
+				_atoms.Add(name, ret = (uint)reply.Atom);
+			}
+			return (Atom)ret;
 		}
 	}
 }
