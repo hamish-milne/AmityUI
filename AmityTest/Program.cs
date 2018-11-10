@@ -18,7 +18,7 @@ namespace Amity
         static unsafe void Main(string[] args)
         {
             WindowBase.Register(X11Window.Factory);
-            //WindowBase.Register(Win32.Factory);
+            WindowBase.Register(Win32.Factory);
 
             var window = new WindowBase();
 
@@ -135,14 +135,14 @@ namespace Amity
             };
             window.IsVisible = true;
 
-            window.Icon.Pen = null;
-            window.Icon.Brush = Color.Empty;
-            window.Icon.Rectangle(new Rectangle(0, 0, 48, 48));
-            window.Icon.Pen = Color.Red;
-            window.Icon.Brush = Color.Teal;
-            window.Icon.ArcFillMode = ArcFillMode.Slice;
-            window.Icon.Arc(new Rectangle(0, 0, 48, 48), 0, 270);
-            window.FlushIcon();
+            // window.Icon.Pen = null;
+            // window.Icon.Brush = Color.Empty;
+            // window.Icon.Rectangle(new Rectangle(0, 0, 48, 48));
+            // window.Icon.Pen = Color.Red;
+            // window.Icon.Brush = Color.Teal;
+            // window.Icon.ArcFillMode = ArcFillMode.Slice;
+            // window.Icon.Arc(new Rectangle(0, 0, 48, 48), 0, 270);
+            // window.FlushIcon();
 
             window.Run();
         }

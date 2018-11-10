@@ -301,6 +301,8 @@ namespace Amity
 			public Color? Pen { get; set; }
 			public Color? TextColor { get; set; }
 			public Size Size { get; }
+			public HAlign TextHAlign { get; set; }
+			public VAlign TextVAlign { get; set; }
 
 			private IFont _font;
 			public IFont Font
@@ -564,8 +566,26 @@ namespace Amity
 			{
 				if (Font != null && SetColor(TextColor))
 				{
+					switch (TextVAlign) {
+						case VAlign.Middle:
+							position.Y += (Font.Ascent - Font.Descent) / 2;
+							break;
+						case VAlign.Top:
+							position.Y += Font.Ascent;
+							break;
+					}
+					switch (TextHAlign) {
+						case HAlign.Right:
+							var (left, right) = Font.MeasureText(text);
+							position.X -= left;
+							break;
+						case HAlign.Center:
+							var (left1, right1) = Font.MeasureText(text);
+							position.X -= (left1 - right1) / 2;
+							break;
+					}
 					// TODO: Support newlines, wrapping etc.?
-					_c.Request(new ImageText16
+					_c.Request(new PolyText16
 					{
 						Drawable = _drawable,
 						GContext = _gc,

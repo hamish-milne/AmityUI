@@ -4,471 +4,9 @@ namespace Amity
 	using System.Drawing;
 	using System.Runtime.InteropServices;
 	using static System.Runtime.InteropServices.UnmanagedType;
-	using System.Collections.Generic;
-	using System.Diagnostics;
 
-	public class Win32 : IWindow
+	public partial class Win32
 	{
-		public static bool IsSupported
-			=> Environment.OSVersion.Platform == PlatformID.Win32NT;
-		
-		public static IWindow Factory(bool force)
-		{
-			return force || IsSupported ? new Win32() : null;
-		}
-
-		public ReadOnlySpan<IFontFamily> Fonts => throw new NotImplementedException();
-
-		public Rectangle WindowArea
-		{
-			get {
-				ThrowError(GetWindowRect(_hwnd, out var rect) == 0);
-				return new Rectangle(
-					rect.left,
-					rect.top,
-					rect.right - rect.left,
-					rect.bottom - rect.top
-				);
-			}
-			set => throw new NotImplementedException();
-		}
-
-		public Rectangle ClientArea
-		{
-			get {
-				ThrowError(GetClientRect(_hwnd, out var rect) == 0);
-				return new Rectangle(
-					rect.left,
-					rect.top,
-					rect.right - rect.left,
-					rect.bottom - rect.top
-				);
-			}
-			set => ThrowError(!SetWindowPos(_hwnd, IntPtr.Zero,
-				value.X, value.Y, value.Width, value.Height, SWP.NoZOrder));
-		}
-
-		private static void ThrowError(bool hasError)
-		{
-			if (hasError)
-			{
-				var code = GetLastError();
-				if (code != 0)
-				{
-					var ret = FormatMessage(FORMAT_MESSAGE.ALLOCATE_BUFFER
-						| FORMAT_MESSAGE.FROM_SYSTEM,
-						IntPtr.Zero,
-						code,
-						0,
-						out var lpBuffer,
-						0,
-						IntPtr.Zero);
-					if (ret <= 0)
-					{
-						throw new Exception(
-							$"Error code {code} (format message failed)");
-					} else {
-						throw new Exception(lpBuffer);
-					}
-				}
-				throw new Exception(
-					"Something went wrong, but no error code was set");
-			}
-		}
-
-		// This native callback is static to avoid leaking memory
-		private static readonly WNDPROC ClassWndProc;
-
-		private static readonly Dictionary<IntPtr, Win32> _instances
-			= new Dictionary<IntPtr, Win32>();
-		private static Exception _exceptionFromCallback;
-
-		// Limit the repaint rate to avoid flickering
-		private static Stopwatch _stopwatch = new Stopwatch();
-
-		private double _lastRepaintTime = double.NegativeInfinity;
-		private const double RepaintPeriod = 0.02;
-
-		static Win32()
-		{
-			_stopwatch.Start();
-			ClassWndProc = (hwnd, uMsg, wParam, lParam) =>
-			{
-				try
-				{
-					_instances.TryGetValue(hwnd, out var inst);
-					if (inst != null)
-					{
-						inst.HandleMessage(uMsg, wParam, lParam);
-						if (!inst._isValid) {
-							inst._isValid = true;
-							var t = _stopwatch.Elapsed.TotalSeconds;
-							if (t - inst._lastRepaintTime > RepaintPeriod)
-							{
-								inst._lastRepaintTime = t;
-								//InvalidateRect(hwnd, IntPtr.Zero, 0);
-							}
-						}
-					}
-				} catch(Exception e)
-				{
-					_exceptionFromCallback = e;
-				}
-				return DefWindowProcW(hwnd, uMsg, wParam, lParam);
-			};
-		}
-
-		private bool _isValid = true;
-
-		public void Invalidate() => _isValid = false;
-
-		private void HandleMessage(WM uMsg, UIntPtr wParam, IntPtr lParam)
-		{
-			switch (uMsg)
-			{
-				case WM.DESTROY:
-					PostQuitMessage(0);
-					break;
-				case WM.SIZE:
-					Resize?.Invoke();
-					break;
-				case WM.PAINT:
-					BeginPaint(_hwnd, out var paint);
-					Draw?.Invoke();
-					EndPaint(_hwnd, ref paint);
-					break;
-				case WM.MOUSEMOVE:
-					var xPos = (short)(ushort)(uint)lParam.ToInt32();
-					var yPos = (short)(ushort)((uint)lParam.ToInt32() >> 16);
-					MousePosition = new Point(xPos, yPos);
-					MouseMove?.Invoke(MousePosition);
-					break;
-			}
-		}
-
-		private IntPtr _hwnd;
-		private IntPtr _dstDc;
-
-		public event Action<Point> MouseMove;
-		public event Action<int> MouseDown;
-		public event Action<int> KeyDown;
-		public event Action<int> KeyUp;
-		public event Action Resize;
-		public event Action Draw;
-
-		// TODO: Warp pointer
-		public Point MousePosition { get; set; }
-
-		public Win32()
-		{
-			
-			SetProcessDpiAwarenessContext(
-				DPI_AWARENESS_CONTEXT.PER_MONITOR_AWARE_V2);
-			var hInstance = GetModuleHandle(null);
-			var wndClass = new WNDCLASSEXW
-			{
-				cbSize = Marshal.SizeOf(typeof(WNDCLASSEXW)),
-				style = CS.HREDRAW | CS.VREDRAW,
-				lpfnWndProc = ClassWndProc,
-				hInstance = hInstance,
-				hIcon = LoadIconW(IntPtr.Zero, new IntPtr(32516)),
-				hCursor = LoadCursorW(IntPtr.Zero, new IntPtr(32512)),
-				lpszClassName = "AmityWindowClass"
-			};
-			var atom = RegisterClassExW(ref wndClass);
-			ThrowError(atom == 0);
-
-			_hwnd = CreateWindowExW(
-				WS_EX.OVERLAPPEDWINDOW | WS_EX.APPWINDOW,
-				new IntPtr(atom),
-				"My window!",
-				WS.OVERLAPPEDWINDOW,
-				0x80000000,
-				0x80000000,
-				0x80000000,
-				0x80000000,
-				IntPtr.Zero,
-				IntPtr.Zero,
-				hInstance,
-				IntPtr.Zero
-			);
-			ThrowError(_hwnd == IntPtr.Zero);
-			_instances[_hwnd] = this;
-
-			_dstDc = GetDC(_hwnd);
-		}
-
-		public bool IsVisible
-		{
-			get => IsWindowVisible(_hwnd);
-			set
-			{
-				if (IsVisible)
-				{
-					ShowWindow(_hwnd, SW.Hide);
-				} else {
-					ShowWindow(_hwnd, SW.ShowNormal);
-					Resize?.Invoke();
-				}
-			}
-		}
-
-		public IDrawingContext Icon => throw new NotImplementedException();
-
-		public void Run()
-		{
-			while (GetMessage(out var msg, _hwnd, 0, 0) != 0)
-			{
-				TranslateMessage(ref msg);
-				DispatchMessage(ref msg);
-				if (msg.message == WM.NULL)
-				{
-					break;
-				}
-				if (_exceptionFromCallback != null)
-				{
-					throw new Exception(
-						"Exception in callback", _exceptionFromCallback);
-				}
-			}
-		}
-
-		public IDrawingContext CreateDrawingContext()
-		{
-			return new DrawingContext(_hwnd);
-		}
-
-		public IDrawingContext CreateBitmap(Size size)
-		{
-			return new DrawingContext(_hwnd, size);
-		}
-
-		private class DrawingContext : IDrawingContext
-		{
-			private IntPtr _hdc;
-			private IntPtr _bitmap;
-
-			private void ConfigureDC()
-			{
-				SetBkMode(_hdc, BkMode.TRANSPARENT);
-				SelectObject(_hdc, GetStockObject(StockObjects.DC_PEN));
-				SelectObject(_hdc, GetStockObject(StockObjects.DC_BRUSH));
-			}
-
-			public DrawingContext(IntPtr hwnd)
-			{
-				_hdc = GetDC(hwnd);
-				ConfigureDC();
-			}
-
-			public DrawingContext(IntPtr hwnd, Size size)
-			{
-				var tmpDc = GetDC(hwnd);
-				_hdc = CreateCompatibleDC(tmpDc);
-				_bitmap = CreateCompatibleBitmap(tmpDc, size.Width, size.Height);
-				ReleaseDC(tmpDc);
-				SelectObject(_hdc, _bitmap);
-				ConfigureDC();
-			}
-
-			private static Color ToColor(uint cr) =>
-				Color.FromArgb((byte)(cr), (byte)(cr >> 8), (byte)(cr >> 16));
-
-			private static uint ToColorRef(Color color) =>
-				(uint)((color.R) | (color.G << 8) | (color.B << 16));
-
-			public Color? Brush
-			{
-				get => ToColor(GetDCBrushColor(_hdc));
-				set
-				{
-					ThrowError(SelectObject(_hdc, GetStockObject(value == null
-						? StockObjects.NULL_BRUSH : StockObjects.DC_BRUSH))
-						== IntPtr.Zero);
-					if (value.HasValue) {
-						ThrowError(
-							SetDCBrushColor(_hdc, ToColorRef(value.Value))
-							== uint.MaxValue);
-					}
-				}
-			}
-
-			public Color? Pen
-			{
-				get => ToColor(GetDCPenColor(_hdc));
-				set
-				{
-					ThrowError(SelectObject(_hdc, GetStockObject(value == null
-						? StockObjects.NULL_PEN : StockObjects.DC_PEN))
-						== IntPtr.Zero);
-					if (value.HasValue) {
-						ThrowError(SetDCPenColor(_hdc, ToColorRef(value.Value))
-						== uint.MaxValue);
-					}
-				}
-			}
-
-			private bool _textEnabled = true;
-			public Color? TextColor
-			{
-				get => _textEnabled ? ToColor(GetTextColor(_hdc)) : default;
-				set
-				{
-					if (value.HasValue)
-					{
-						ThrowError(SetTextColor(_hdc, ToColorRef(value.Value))
-						== uint.MaxValue);
-						_textEnabled = true;
-					} else {
-						_textEnabled = false;
-					}
-				}
-			}
-
-			// TODO: Implement these:
-			public IFont Font { get; set; }
-
-			public float LineWidth { get; set; }
-
-			public ArcFillMode ArcFillMode { get; set; }
-
-			public void Arc(Rectangle rect, float angleA, float angleB)
-			{
-				var radialLength = Math.Max(rect.Width, rect.Height) * 100;
-				var cx = (rect.Right - rect.Left) / 2;
-				var cy = (rect.Bottom - rect.Top) / 2;
-				angleA *= (float)Math.PI / 180;
-				angleA *= (float)Math.PI / 180;
-				var x3 = (int)(Math.Cos(angleA) * radialLength) + cx;
-				var y3 = (int)(Math.Sin(angleA) * radialLength) + cy;
-				var x4 = (int)(Math.Cos(angleB) * radialLength) + cx;
-				var y4 = (int)(Math.Sin(angleB) * radialLength) + cy;
-				switch (ArcFillMode)
-				{
-					case ArcFillMode.Chord:
-						ThrowError(!Chord(_hdc,
-							rect.Left, rect.Top,
-							rect.Right, rect.Bottom,
-							x3, y3, x4, y4
-						));
-						break;
-					case ArcFillMode.Slice:
-						ThrowError(!Pie(_hdc,
-							rect.Left, rect.Top,
-							rect.Right, rect.Bottom,
-							x3, y3, x4, y4
-						));
-						break;
-					default:
-						ThrowError(!Win32.Arc(_hdc,
-							rect.Left, rect.Top,
-							rect.Right, rect.Bottom,
-							x3, y3, x4, y4
-						));
-						break;
-
-				}
-			}
-
-			public void Polygon(ReadOnlySpan<Point> points)
-			{
-				throw new NotImplementedException();
-			}
-
-			public void Dispose()
-			{
-				ReleaseDC(_hdc);
-				_hdc = IntPtr.Zero;
-				ReleaseDC(_bitmap);
-				_bitmap = IntPtr.Zero;
-			}
-
-			~DrawingContext()
-			{
-				Dispose();
-			}
-
-			public void Line(ReadOnlySpan<Point> points)
-			{
-				// TODO: Use PolyLine here?
-				ThrowError(MoveToEx(_hdc, points[0].X, points[0].Y, out var _) == 0);
-				foreach (var p in points.Slice(1))
-				{
-					ThrowError(LineTo(_hdc, p.X, p.Y) == 0);
-				}
-			}
-
-			public void Rectangle(ReadOnlySpan<Rectangle> rects)
-			{
-				foreach (var rect in rects)
-					ThrowError(Win32.Rectangle(_hdc,
-						rect.Left, rect.Top, rect.Right, rect.Bottom) == 0);
-			}
-
-			public void Text(Point position, string text)
-			{
-				if (!_textEnabled) { return; }
-				// TODO: Query font etc.
-				ExtTextOutW(_hdc, position.X, position.Y,
-					0, null, text, (uint)text.Length, null);
-				// TODO: Allow formatting etc?
-				// var dtp = new DRAWTEXTPARAMS
-				// {
-				// 	cbSize = (uint)Marshal.SizeOf<DRAWTEXTPARAMS>(),
-				// 	iTabLength = 4,
-				// 	iLeftMargin = 0,
-				// 	iRightMargin = 0
-				// };
-				// RECT rect = new Rectangle(position, new Size(0, 0));
-				// Win32.DrawTextExW(_hdc, text, text.Length, ref rect,
-				// 	DT.NoClip | DT.Left | DT.Top, ref dtp);
-			}
-
-			public unsafe void Image(
-				Span<Color32> data, Size size, Point destination)
-			{
-				if (data.Length != (size.Width * size.Height))
-				{
-					throw new ArgumentOutOfRangeException(
-			$"Buffer length {data.Length} doesn't match image size {size}");
-				}
-				var lpbmi = new BITMAPINFOHEADER
-				{
-					biSize = (uint)Marshal.SizeOf<BITMAPINFOHEADER>(),
-					biWidth = size.Width,
-					biHeight = -size.Height,
-					biPlanes = 1,
-					biBitCount = 32,
-					biCompression = BI.RGB
-				};
-				fixed (Color32* ptr = data)
-				{
-					ThrowError(SetDIBitsToDevice(
-						_hdc, destination.X, destination.Y,
-						(uint)size.Width, (uint)size.Height, 0, 0, 0,
-						(uint)size.Height, (IntPtr)ptr,
-						ref lpbmi, DIB.RGB_COLORS) == 0);
-				}
-			}
-
-			public void CopyTo(Rectangle srcRect, Point dstPos, IDrawingContext dst)
-			{
-				var dstC = (DrawingContext)dst;
-				ThrowError(0 == BitBlt(dstC._hdc, dstPos.X, dstPos.Y,
-					srcRect.Width, srcRect.Height, _hdc, srcRect.X, srcRect.Y, RasterOp.SRCCOPY));
-			}
-		}
-
-		public IFont LoadFont(string name) => throw new NotImplementedException();
-
-		public void FlushIcon()
-		{
-			throw new NotImplementedException();
-		}
-
-
-#region pinvoke
-
 		private const string User = "User32";
 		private const string Kernel = "Kernel32";
 		private const string Gdi = "Gdi32";
@@ -1416,7 +954,212 @@ namespace Amity
 			int x1, int y1, int x2, int y2, int x3, int y3, int x4, int y4
 		);
 
-#endregion pinvoke
+		[StructLayout(LayoutKind.Sequential, Pack = 1, CharSet = CharSet.Auto)]
+		private struct LOGFONTW
+		{
+			public int lfHeight;
+			public int lfWidth;
+			public int lfEscapement;
+			public int lfOrientation;
+			public FontWeight lfWeight;
+			[MarshalAs(UnmanagedType.U1)]
+			public bool lfItalic;
+			[MarshalAs(UnmanagedType.U1)]
+			public bool lfUnderline;
+			[MarshalAs(UnmanagedType.U1)]
+			public bool lfStrikeOut;
+			public FontCharSet lfCharSet;
+			public FontPrecision lfOutPrecision;
+			public FontClipPrecision lfClipPrecision;
+			public FontQuality lfQuality;
+			public FontPitchAndFamily lfPitchAndFamily;
+			[MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+			public string lfFaceName;
+		}
 
+		private enum FontWeight : int
+		{
+			FW_DONTCARE = 0,
+			FW_THIN = 100,
+			FW_EXTRALIGHT = 200,
+			FW_LIGHT = 300,
+			FW_NORMAL = 400,
+			FW_MEDIUM = 500,
+			FW_SEMIBOLD = 600,
+			FW_BOLD = 700,
+			FW_EXTRABOLD = 800,
+			FW_HEAVY = 900,
+		}
+
+		private enum FontCharSet : byte
+		{
+			ANSI_CHARSET = 0,
+			DEFAULT_CHARSET = 1,
+			SYMBOL_CHARSET = 2,
+			SHIFTJIS_CHARSET = 128,
+			HANGEUL_CHARSET = 129,
+			HANGUL_CHARSET = 129,
+			GB2312_CHARSET = 134,
+			CHINESEBIG5_CHARSET = 136,
+			OEM_CHARSET = 255,
+			JOHAB_CHARSET = 130,
+			HEBREW_CHARSET = 177,
+			ARABIC_CHARSET = 178,
+			GREEK_CHARSET = 161,
+			TURKISH_CHARSET = 162,
+			VIETNAMESE_CHARSET = 163,
+			THAI_CHARSET = 222,
+			EASTEUROPE_CHARSET = 238,
+			RUSSIAN_CHARSET = 204,
+			MAC_CHARSET = 77,
+			BALTIC_CHARSET = 186,
+		}
+
+		private enum FontPrecision : byte
+		{
+			OUT_DEFAULT_PRECIS = 0,
+			OUT_STRING_PRECIS = 1,
+			OUT_CHARACTER_PRECIS = 2,
+			OUT_STROKE_PRECIS = 3,
+			OUT_TT_PRECIS = 4,
+			OUT_DEVICE_PRECIS = 5,
+			OUT_RASTER_PRECIS = 6,
+			OUT_TT_ONLY_PRECIS = 7,
+			OUT_OUTLINE_PRECIS = 8,
+			OUT_SCREEN_OUTLINE_PRECIS = 9,
+			OUT_PS_ONLY_PRECIS = 10,
+		}
+
+		private enum FontClipPrecision : byte
+		{
+			CLIP_DEFAULT_PRECIS = 0,
+			CLIP_CHARACTER_PRECIS = 1,
+			CLIP_STROKE_PRECIS = 2,
+			CLIP_MASK = 0xf,
+			CLIP_LH_ANGLES = (1 << 4),
+			CLIP_TT_ALWAYS = (2 << 4),
+			CLIP_DFA_DISABLE = (4 << 4),
+			CLIP_EMBEDDED = (8 << 4),
+		}
+
+		private enum FontQuality : byte
+		{
+			DEFAULT_QUALITY = 0,
+			DRAFT_QUALITY = 1,
+			PROOF_QUALITY = 2,
+			NONANTIALIASED_QUALITY = 3,
+			ANTIALIASED_QUALITY = 4,
+			CLEARTYPE_QUALITY = 5,
+			CLEARTYPE_NATURAL_QUALITY = 6,
+		}
+
+		[Flags]
+		private enum FontPitchAndFamily : byte
+		{
+			DEFAULT_PITCH = 0,
+			FIXED_PITCH = 1,
+			VARIABLE_PITCH = 2,
+			FF_DONTCARE = (0 << 4),
+			FF_ROMAN = (1 << 4),
+			FF_SWISS = (2 << 4),
+			FF_MODERN = (3 << 4),
+			FF_SCRIPT = (4 << 4),
+			FF_DECORATIVE = (5 << 4),
+		}
+
+		[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+		public struct NEWTEXTMETRIC
+		{
+			public int tmHeight;
+			public int tmAscent;
+			public int tmDescent;
+			public int tmInternalLeading;
+			public int tmExternalLeading;
+			public int tmAveCharWidth;
+			public int tmMaxCharWidth;
+			public int tmWeight;
+			public int tmOverhang;
+			public int tmDigitizedAspectX;
+			public int tmDigitizedAspectY;
+			public char tmFirstChar;
+			public char tmLastChar;
+			public char tmDefaultChar;
+			public char tmBreakChar;
+			public byte tmItalic;
+			public byte tmUnderlined;
+			public byte tmStruckOut;
+			public byte tmPitchAndFamily;
+			public byte tmCharSet;
+			int ntmFlags;
+			int ntmSizeEM;
+			int ntmCellHeight;
+			int ntmAvgWidth;
+		}
+
+		[StructLayout(LayoutKind.Sequential, Pack = 1)]
+		public struct FONTSIGNATURE
+		{
+			[MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
+			int[] fsUsb;
+			[MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
+			int[] fsCsb;
+		}
+
+		[StructLayout(LayoutKind.Sequential, Pack = 1)]
+		public struct NEWTEXTMETRICEX
+		{
+			NEWTEXTMETRIC ntmTm;
+			FONTSIGNATURE ntmFontSig;
+		}
+
+		private delegate int EnumFontFamExProc(
+			in LOGFONTW lpelfe,
+			in NEWTEXTMETRICEX lpntme,
+			int FontType,
+			IntPtr lParam
+		);
+
+		[DllImport(Gdi)]
+		private static extern int EnumFontFamiliesExW(
+			IntPtr hdc,
+			ref LOGFONTW lpLogFont,
+			EnumFontFamExProc lpEnumFontFamExProc,
+			IntPtr lParam,
+			int dwFlags
+		);
+
+		[DllImport(Gdi)]
+		private static extern IntPtr CreateFontIndirectW(
+			in LOGFONTW lplf
+		);
+
+		[StructLayout(LayoutKind.Sequential, Pack = 4)]
+		private struct SIZE
+		{
+			public int cx, cy;
+		}
+
+		[DllImport(Gdi)]
+		[return: MarshalAs(Bool)]
+		private static extern bool GetTextExtentPoint32W(
+			IntPtr hdc,
+			[MarshalAs(LPWStr)] string lpString,
+			int c,
+			out SIZE psizl
+		);
+
+		[DllImport(Gdi)]
+		[return: MarshalAs(Bool)]
+		private static extern bool GetTextMetricsW(
+			IntPtr hdc,
+			out NEWTEXTMETRIC lptm
+		);
+
+		[DllImport(Gdi)]
+		private static extern bool Polygon(
+			IntPtr hdc,
+			in POINT apt,
+			int cpt
+		);
 	}
 }

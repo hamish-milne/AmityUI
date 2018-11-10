@@ -68,6 +68,20 @@ namespace Amity
 		Slice
 	}
 
+	public enum HAlign
+	{
+		Left,
+		Center,
+		Right
+	}
+
+	public enum VAlign
+	{
+		Top,
+		Middle,
+		Bottom
+	}
+
 	public interface IDrawingContext : IDisposable
 	{
 		Color? Brush { get; set; }
@@ -76,6 +90,8 @@ namespace Amity
 		float LineWidth { get; set; }
 		ArcFillMode ArcFillMode { get; set; }
 		IFont Font { get; set; }
+		HAlign TextHAlign { get; set; }
+		VAlign TextVAlign { get; set; }
 
 		void Polygon(ReadOnlySpan<Point> points);
 		void Line(ReadOnlySpan<Point> points);
@@ -104,7 +120,7 @@ namespace Amity
 		{
 			foreach (var f in window.Fonts)
 			{
-				if (f.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+				if (f.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase))
 				{
 					return f;
 				}
